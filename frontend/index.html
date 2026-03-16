@@ -1,0 +1,50 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DropNova ⚡ Peer-to-Peer Transfer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        success: '#22c55e',
+                        warning: '#facc15',
+                        darkBg: '#0f172a',
+                        lightBg: '#f8fafc'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-lightBg dark:bg-darkBg text-gray-900 dark:text-white transition-colors duration-300 min-h-screen font-sans">
+    
+    <!-- Navbar Component -->
+    <nav class="fixed top-0 w-full p-4 flex justify-between items-center z-50 backdrop-blur-md border-b border-gray-200 dark:border-white/10">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="router.navigate('home')">
+            <span class="text-2xl">⚡</span>
+            <span class="font-bold text-xl tracking-tight">DropNova</span>
+        </div>
+        <button id="theme-toggle" class="p-2 rounded-full bg-gray-200 dark:bg-white/10 hover:scale-110 transition-transform">
+            <span id="theme-icon-dark" class="hidden text-xl">🌙</span>
+            <span id="theme-icon-light" class="text-xl">☀️</span>
+        </button>
+    </nav>
+
+    <!-- App Container (Router View) -->
+    <main id="app-root" class="pt-24 pb-12 px-4 max-w-md mx-auto min-h-screen flex flex-col items-center justify-center transition-opacity duration-300">
+        <!-- Screens injected here -->
+    </main>
+
+    <script src="router.js" type="module"></script>
+    <script src="app.js" type="module"></script>
+</body>
+</html>
