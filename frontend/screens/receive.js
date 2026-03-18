@@ -1,15 +1,20 @@
 // frontend/screens/receive.js
-
+import { createConnection } from "../webrtc.js";
 window.connectDevice = function () {
     const code = document.getElementById("pair-code").value.trim();
-    const storedCode = sessionStorage.getItem("pairCode");
 
-    if (code !== storedCode) {
-        alert("Invalid pairing code");
+    if (code.length !== 6 || isNaN(code)) {
+        alert("Enter valid code");
         return;
     }
 
-    router.navigate('connected');
+    const socket = new WebSocket(`ws://127.0.0.1:8000/ws/${code}`);
+    socket.onopen = () => {
+        console.log("Receiver connected");
+        createConnection(socket, false);
+        router.navigate('connected');
+    };
+    window.socket = socket;
 };
 export const Receive = () => `
 <div class="w-full text-center space-y-8">

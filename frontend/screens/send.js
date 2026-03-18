@@ -1,5 +1,5 @@
 // frontend/screens/send.js
-
+import { createConnection } from "../webrtc.js";
 function generateCode() {
     return Math.floor(100000 + Math.random() * 900000);
 }
@@ -7,6 +7,12 @@ function generateCode() {
 export const Send = () => {
     const code = generateCode();
     sessionStorage.setItem("pairCode", code);
+    const socket = new WebSocket(`ws://127.0.0.1:8000/ws/${code}`);
+    socket.onopen = () => {
+        console.log("Sender connected");
+        createConnection(socket, true);
+    };
+    window.socket = socket;
 
     setTimeout(() => {
         const qrContainer = document.getElementById("qrcode");
