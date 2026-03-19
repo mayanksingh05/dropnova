@@ -50,33 +50,55 @@ export function createConnection(socket, isSender) {
     }
 
     // handle messages
-    socket.onmessage = async (msg) => {
-        const data = JSON.parse(msg.data);
+    let incomingFile = null;
+    let receivedSize = 0;
+    let receivedBuffers = [];
 
-        if (data.type === "offer") {
-            await peerConnection.setRemoteDescription(data.offer);
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
+    dataChannel.onmessage = async (e) => {
+        // TEXT messages (metadata / end signal)
+        if (typeof e.data === "string") {
+            const msg = JSON.parse(e.data);
 
-            socket.send(JSON.stringify({
-                type: "answer",
-                answer: answer
-            }));
+            if (msg.type === "file-meta") {
+                console.log("Receiving file:", msg.name);
+
+                incomingFile = {
+                    name: msg.name,
+                    size: msg.size
+                };
+
+                receivedSize = 0;
+                receivedBuffers = [];
+
+                router.navigate("receiving");
+            }
+
+            if (msg.type === "file-end") {
+                console.log("File received completely");
+
+                const blob = new Blob(receivedBuffers);
+
+                // 🔥 Auto download
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = incomingFile.name;
+                a.click();
+
+                URL.revokeObjectURL(url);
+
+                router.navigate("completed");
+            }
+
+            return;
         }
 
-        if (data.type === "answer") {
-            await peerConnection.setRemoteDescription(data.answer);
-        }
+        // BINARY chunks
+        receivedBuffers.push(e.data);
+        receivedSize += e.data.byteLength;
 
-        if (data.type === "ice") {
-            await peerConnection.addIceCandidate(data.candidate);
-        }
+        console.log(`Received ${receivedSize} / ${incomingFile.size}`);
     };
-
-    // sender starts offer
-    if (isSender) {
-        startOffer(socket);
-    }
 }
 
 async function startOffer(socket) {
