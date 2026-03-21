@@ -11,6 +11,7 @@ window.connectDevice = function () {
     const socket = new WebSocket(`ws://127.0.0.1:8000/ws/${code}`);
     socket.onopen = () => {
         console.log("Receiver connected");
+        window.isSender = false;   // ✅ ADD THIS
         createConnection(socket, false);
         router.navigate('connected');
     };

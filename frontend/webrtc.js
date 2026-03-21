@@ -13,7 +13,7 @@ const config = {
 export function createConnection(socket, isSender) {
     peerConnection = new RTCPeerConnection(config);
 
-    // ICE candidates
+    // ICE
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
             socket.send(JSON.stringify({
@@ -23,82 +23,128 @@ export function createConnection(socket, isSender) {
         }
     };
 
-    if (isSender) {
-        // sender creates data channel
-        dataChannel = peerConnection.createDataChannel("file");
+    // 🔥 IMPORTANT: CONNECTION STATE FIX
+    peerConnection.oniceconnectionstatechange = () => {
+        console.log("ICE state:", peerConnection.iceConnectionState);
 
-        dataChannel.onopen = () => {
-            console.log("Data channel open (sender)");
-        };
+        if (
+            peerConnection.iceConnectionState === "connected" ||
+            peerConnection.iceConnectionState === "completed"
+        ) {
+            console.log("ICE fully connected");
 
-        dataChannel.onmessage = (e) => {
-            console.log("Received:", e.data);
-        };
-    } else {
-        // receiver listens
-        peerConnection.ondatachannel = (event) => {
-            dataChannel = event.channel;
+            if (window.router) {
+                window.router.navigate("connected");
+            }
+        }
+    };
 
-            dataChannel.onopen = () => {
-                console.log("Data channel open (receiver)");
-            };
-
-            dataChannel.onmessage = (e) => {
-                console.log("Received:", e.data);
-            };
-        };
-    }
-
-    // handle messages
+    // FILE STATE
     let incomingFile = null;
     let receivedSize = 0;
     let receivedBuffers = [];
 
-    dataChannel.onmessage = async (e) => {
-        // TEXT messages (metadata / end signal)
-        if (typeof e.data === "string") {
-            const msg = JSON.parse(e.data);
+    function setupDataChannel(channel) {
+        dataChannel = channel;
 
-            if (msg.type === "file-meta") {
-                console.log("Receiving file:", msg.name);
+        console.log("DataChannel ready");
 
-                incomingFile = {
-                    name: msg.name,
-                    size: msg.size
-                };
+        dataChannel.onopen = () => {
+            console.log("Data channel open");
 
-                receivedSize = 0;
-                receivedBuffers = [];
+            // backup navigation
+            if (window.router) {
+                window.router.navigate("connected");
+            }
+        };
 
-                router.navigate("receiving");
+        dataChannel.onmessage = (e) => {
+
+            // TEXT
+            if (typeof e.data === "string") {
+                const msg = JSON.parse(e.data);
+
+                if (msg.type === "file-meta") {
+                    incomingFile = {
+                        name: msg.name,
+                        size: msg.size
+                    };
+
+                    receivedSize = 0;
+                    receivedBuffers = [];
+
+                    console.log("Receiving:", incomingFile.name);
+
+                    window.router.navigate("receiving");
+                }
+
+                if (msg.type === "file-end") {
+                    console.log("File complete");
+
+                    const blob = new Blob(receivedBuffers);
+
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = incomingFile.name;
+                    a.click();
+
+                    URL.revokeObjectURL(url);
+
+                    window.router.navigate("completed");
+                }
+
+                return;
             }
 
-            if (msg.type === "file-end") {
-                console.log("File received completely");
+            // BINARY
+            receivedBuffers.push(e.data);
+            receivedSize += e.data.byteLength;
 
-                const blob = new Blob(receivedBuffers);
+            console.log(`Received ${receivedSize}/${incomingFile?.size}`);
+        };
+    }
 
-                // 🔥 Auto download
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = incomingFile.name;
-                a.click();
+    // SENDER
+    if (isSender) {
+        const channel = peerConnection.createDataChannel("file");
+        setupDataChannel(channel);
+    }
 
-                URL.revokeObjectURL(url);
+    // RECEIVER
+    peerConnection.ondatachannel = (event) => {
+        setupDataChannel(event.channel);
+    };
 
-                router.navigate("completed");
-            }
+    // SIGNALING
+    socket.addEventListener("message", async (msg) => {
+        const data = JSON.parse(msg.data);
 
-            return;
+        if (data.type === "offer") {
+            await peerConnection.setRemoteDescription(data.offer);
+
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            socket.send(JSON.stringify({
+                type: "answer",
+                answer
+            }));
         }
 
-        // BINARY chunks
-        receivedBuffers.push(e.data);
-        receivedSize += e.data.byteLength;
+        if (data.type === "answer") {
+            await peerConnection.setRemoteDescription(data.answer);
+        }
 
-        console.log(`Received ${receivedSize} / ${incomingFile.size}`);
-    };
+        if (data.type === "ice") {
+            await peerConnection.addIceCandidate(data.candidate);
+        }
+    });
+
+    // START
+    if (isSender) {
+        startOffer(socket);
+    }
 }
 
 async function startOffer(socket) {
@@ -107,6 +153,6 @@ async function startOffer(socket) {
 
     socket.send(JSON.stringify({
         type: "offer",
-        offer: offer
+        offer
     }));
 }
