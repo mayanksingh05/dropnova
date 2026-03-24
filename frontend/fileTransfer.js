@@ -1,62 +1,54 @@
 import { dataChannel } from "./webrtc.js";
-import { selectedFile } from "./transfer.js";
 
-const CHUNK_SIZE = 64 * 1024;
+// ✅ used by connected.js (onclick)
+window.handleFileSelect = async function (event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
+    window.selectedFile = file; // store globally
+
+    console.log("File selected:", file.name);
+
+    // optional: navigate if you have sending screen
+    if (window.router) {
+        window.router.navigate("sending");
+    }
+};
+
+// ✅ REQUIRED by sending.js (this was missing)
 export async function sendSelectedFile() {
-    if (!dataChannel) {
-        console.error("DataChannel not found");
-        return;
-    }
+    const file = window.selectedFile;
 
-    // ✅ Wait until channel is OPEN (important fix)
-    if (dataChannel.readyState !== "open") {
-        console.log("Waiting for data channel...");
-
-        await new Promise(resolve => {
-            dataChannel.onopen = () => {
-                console.log("Data channel opened (delayed)");
-                resolve();
-            };
-        });
-    }
-
-    if (!selectedFile) {
+    if (!file) {
         console.error("No file selected");
         return;
     }
 
-    // ✅ Send metadata
+    console.log("📤 Sending:", file.name);
+
+    // send metadata
     dataChannel.send(JSON.stringify({
         type: "file-meta",
-        name: selectedFile.name,
-        size: selectedFile.size
+        name: file.name,
+        size: file.size
     }));
 
+    const chunkSize = 16 * 1024;
     let offset = 0;
 
-    while (offset < selectedFile.size) {
-
-        // ✅ FLOW CONTROL (important)
-        if (dataChannel.bufferedAmount > 65536) {
-            await new Promise(r => setTimeout(r, 10));
-            continue;
-        }
-
-        const chunk = selectedFile.slice(offset, offset + CHUNK_SIZE);
+    while (offset < file.size) {
+        const chunk = file.slice(offset, offset + chunkSize);
         const buffer = await chunk.arrayBuffer();
 
         dataChannel.send(buffer);
-
-        offset += CHUNK_SIZE;
-
-        console.log(`Sent ${offset}/${selectedFile.size}`);
+        offset += chunkSize;
     }
 
-    // ✅ End signal
-    dataChannel.send(JSON.stringify({
-        type: "file-end"
-    }));
+    dataChannel.send(JSON.stringify({ type: "file-end" }));
 
-    console.log("File transfer complete");
+    console.log("✅ File sent");
+
+    if (window.router) {
+        window.router.navigate("completed");
+    }
 }

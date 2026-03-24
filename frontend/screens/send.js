@@ -22,10 +22,10 @@ export const Send = () => {
     window.socket = socket;
 
     setTimeout(() => {
-        const qr = document.getElementById("qrcode");
-        qr.innerHTML = "";
+        const qrContainer = document.getElementById("qrcode");
+        qrContainer.innerHTML = "";
 
-        new QRCode(qr, {
+        new QRCode(qrContainer, {
             text: code.toString(),
             width: 180,
             height: 180
@@ -33,10 +33,30 @@ export const Send = () => {
     }, 0);
 
     return `
-    <div class="text-center space-y-6">
-        <h2 class="text-2xl font-bold">Pair Device</h2>
-        <div id="qrcode"></div>
-        <div class="text-3xl font-bold">${code}</div>
+    <div class="w-full text-center space-y-8">
+
+        <h2 class="text-3xl font-bold tracking-tight">Pair Device</h2>
+
+        <div class="relative inline-block p-5 rounded-3xl glass-card qr-pulse">
+            <div id="qrcode" class="bg-white p-2 rounded-xl"></div>
+        </div>
+
+        <div class="space-y-2">
+            <p class="text-sm opacity-60">Pairing Code</p>
+            <div class="text-5xl font-mono font-bold tracking-widest text-primary">
+                ${code}
+            </div>
+        </div>
+
+        <p class="text-sm px-6 opacity-70">
+            Scan QR or enter code on receiver
+        </p>
+
+        <button onclick="router.navigate('home')" 
+        class="mt-6 px-6 py-2 rounded-xl text-sm opacity-60 hover:opacity-100 transition">
+            Cancel
+        </button>
+
     </div>
     `;
 };

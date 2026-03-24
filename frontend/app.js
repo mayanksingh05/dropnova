@@ -1,6 +1,6 @@
 // frontend/app.js
 import { router } from './router.js';
-
+import './fileTransfer.js';
 document.addEventListener('DOMContentLoaded', () => {
     window.router = router; // Global access for inline onclicks
     
