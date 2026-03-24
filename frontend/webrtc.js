@@ -10,7 +10,7 @@ const config = {
     ]
 };
 
-export function createConnection(socket, isSender) {
+export function createConnection(socket, isSender, onConnected) {
     peerConnection = new RTCPeerConnection(config);
 
     // ICE
@@ -24,17 +24,24 @@ export function createConnection(socket, isSender) {
     };
 
     // 🔥 IMPORTANT: CONNECTION STATE FIX
+    let hasNavigated = false;
+
     peerConnection.oniceconnectionstatechange = () => {
         console.log("ICE state:", peerConnection.iceConnectionState);
 
         if (
-            peerConnection.iceConnectionState === "connected" ||
-            peerConnection.iceConnectionState === "completed"
+            !hasNavigated &&
+            (peerConnection.iceConnectionState === "connected" ||
+            peerConnection.iceConnectionState === "completed")
         ) {
             console.log("ICE fully connected");
 
-            if (window.router) {
-                window.router.navigate("connected");
+            hasNavigated = true;
+
+            if (onConnected) {
+                onConnected();
+            } else {
+                console.error("onConnected callback missing");
             }
         }
     };
@@ -52,9 +59,8 @@ export function createConnection(socket, isSender) {
         dataChannel.onopen = () => {
             console.log("Data channel open");
 
-            // backup navigation
-            if (window.router) {
-                window.router.navigate("connected");
+            if (onConnected) {
+                onConnected();
             }
         };
 

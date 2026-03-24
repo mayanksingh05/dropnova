@@ -10,7 +10,10 @@ export const Send = () => {
     const socket = new WebSocket(`ws://127.0.0.1:8000/ws/${code}`);
     socket.onopen = () => {
         console.log("Sender connected");
-        createConnection(socket, true);
+        window.isSender = true; // ✅ REQUIRED
+        createConnection(socket, true, () => {
+            router.navigate("connected");
+        });
     };
     window.socket = socket;
 
