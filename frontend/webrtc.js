@@ -1,19 +1,28 @@
-// frontend/webrtc.js
-
 export let peerConnection;
 export let dataChannel;
 
 const config = {
     iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" }
+        { urls: "stun:stun.l.google.com:19302" }
     ]
 };
 
 export function createConnection(socket, isSender, onConnected) {
     peerConnection = new RTCPeerConnection(config);
 
-    // ICE
+    let remoteDescSet = false;
+    let iceQueue = [];
+    let connected = false;
+
+    function safeConnect() {
+        if (!connected) {
+            connected = true;
+            console.log("✅ CONNECTED");
+            onConnected && onConnected();
+        }
+    }
+
+    // ICE sending
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
             socket.send(JSON.stringify({
@@ -23,111 +32,51 @@ export function createConnection(socket, isSender, onConnected) {
         }
     };
 
-    // 🔥 IMPORTANT: CONNECTION STATE FIX
-    let hasNavigated = false;
-
+    // ICE state
     peerConnection.oniceconnectionstatechange = () => {
-        console.log("ICE state:", peerConnection.iceConnectionState);
+        console.log("ICE:", peerConnection.iceConnectionState);
 
         if (
-            !hasNavigated &&
-            (peerConnection.iceConnectionState === "connected" ||
-            peerConnection.iceConnectionState === "completed")
+            peerConnection.iceConnectionState === "connected" ||
+            peerConnection.iceConnectionState === "completed"
         ) {
-            console.log("ICE fully connected");
-
-            hasNavigated = true;
-
-            if (onConnected) {
-                onConnected();
-            } else {
-                console.error("onConnected callback missing");
-            }
+            safeConnect();
         }
     };
 
-    // FILE STATE
-    let incomingFile = null;
-    let receivedSize = 0;
-    let receivedBuffers = [];
-
-    function setupDataChannel(channel) {
+    // DataChannel setup
+    function setupChannel(channel) {
         dataChannel = channel;
 
-        console.log("DataChannel ready");
+        console.log("📡 DataChannel ready");
 
         dataChannel.onopen = () => {
-            console.log("Data channel open");
-
-            if (onConnected) {
-                onConnected();
-            }
-        };
-
-        dataChannel.onmessage = (e) => {
-
-            // TEXT
-            if (typeof e.data === "string") {
-                const msg = JSON.parse(e.data);
-
-                if (msg.type === "file-meta") {
-                    incomingFile = {
-                        name: msg.name,
-                        size: msg.size
-                    };
-
-                    receivedSize = 0;
-                    receivedBuffers = [];
-
-                    console.log("Receiving:", incomingFile.name);
-
-                    window.router.navigate("receiving");
-                }
-
-                if (msg.type === "file-end") {
-                    console.log("File complete");
-
-                    const blob = new Blob(receivedBuffers);
-
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = incomingFile.name;
-                    a.click();
-
-                    URL.revokeObjectURL(url);
-
-                    window.router.navigate("completed");
-                }
-
-                return;
-            }
-
-            // BINARY
-            receivedBuffers.push(e.data);
-            receivedSize += e.data.byteLength;
-
-            console.log(`Received ${receivedSize}/${incomingFile?.size}`);
+            console.log("🔥 DataChannel OPEN");
+            safeConnect();
         };
     }
 
-    // SENDER
     if (isSender) {
-        const channel = peerConnection.createDataChannel("file");
-        setupDataChannel(channel);
+        setupChannel(peerConnection.createDataChannel("file"));
+    } else {
+        peerConnection.ondatachannel = (e) => {
+            setupChannel(e.channel);
+        };
     }
 
-    // RECEIVER
-    peerConnection.ondatachannel = (event) => {
-        setupDataChannel(event.channel);
-    };
-
-    // SIGNALING
+    // signaling
     socket.addEventListener("message", async (msg) => {
         const data = JSON.parse(msg.data);
+        console.log("📩", data);
 
         if (data.type === "offer") {
             await peerConnection.setRemoteDescription(data.offer);
+            remoteDescSet = true;
+
+            for (const ice of iceQueue) {
+                await peerConnection.addIceCandidate(ice);
+            }
+            iceQueue = [];
 
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
@@ -140,16 +89,31 @@ export function createConnection(socket, isSender, onConnected) {
 
         if (data.type === "answer") {
             await peerConnection.setRemoteDescription(data.answer);
+            remoteDescSet = true;
+
+            for (const ice of iceQueue) {
+                await peerConnection.addIceCandidate(ice);
+            }
+            iceQueue = [];
         }
 
         if (data.type === "ice") {
-            await peerConnection.addIceCandidate(data.candidate);
+            if (remoteDescSet) {
+                await peerConnection.addIceCandidate(data.candidate);
+            } else {
+                iceQueue.push(data.candidate);
+            }
+        }
+
+        // 🔥 sender starts ONLY when receiver joins
+        if (data.type === "join" && isSender) {
+            startOffer(socket);
         }
     });
 
-    // START
-    if (isSender) {
-        startOffer(socket);
+    // receiver announces ready
+    if (!isSender) {
+        socket.send(JSON.stringify({ type: "ready" }));
     }
 }
 

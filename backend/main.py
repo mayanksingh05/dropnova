@@ -1,10 +1,7 @@
-# backend/main.py
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 app = FastAPI()
 
-# store active connections
 rooms = {}
 
 @app.websocket("/ws/{room_id}")
@@ -16,11 +13,15 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
 
     rooms[room_id].append(websocket)
 
+    # 🔥 notify others someone joined
+    for conn in rooms[room_id]:
+        if conn != websocket:
+            await conn.send_text('{"type":"join"}')
+
     try:
         while True:
             data = await websocket.receive_text()
 
-            # send message to other peer
             for connection in rooms[room_id]:
                 if connection != websocket:
                     await connection.send_text(data)
