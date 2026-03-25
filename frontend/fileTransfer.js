@@ -4,14 +4,16 @@ let incomingFile = null;
 let receivedBuffers = [];
 let receivedSize = 0;
 
-// 🔥 RECEIVER HANDLER
+let startTime = 0;
+
+// ================= RECEIVER =================
 window.handleIncomingData = function (data) {
 
     if (typeof data === "string") {
         const msg = JSON.parse(data);
 
         if (msg.type === "file-meta") {
-            console.log("[FILE] meta received", msg.name);
+            console.log("[FILE] meta received:", msg.name);
 
             incomingFile = msg;
             receivedBuffers = [];
@@ -25,7 +27,6 @@ window.handleIncomingData = function (data) {
 
             const blob = new Blob(receivedBuffers);
 
-            // store file
             if (!window.receivedFiles) window.receivedFiles = [];
 
             window.receivedFiles.push({
@@ -46,12 +47,20 @@ window.handleIncomingData = function (data) {
         receivedBuffers.push(data);
         receivedSize += data.byteLength;
 
-        console.log("[FILE] chunk", receivedSize);
+        console.log("[FILE] chunk:", receivedSize);
+
+        // 🔥 RECEIVER PROGRESS
+        if (incomingFile) {
+            const progress = Math.floor((receivedSize / incomingFile.size) * 100);
+
+            const bar = document.querySelector(".progress-bar-fill");
+            if (bar) bar.style.width = progress + "%";
+        }
     }
 };
 
 
-// sender select
+// ================= FILE SELECT =================
 window.handleFileSelect = async function (event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -62,7 +71,7 @@ window.handleFileSelect = async function (event) {
 };
 
 
-// sender send
+// ================= SENDER =================
 export async function sendSelectedFile() {
     const file = window.selectedFile;
     if (!file) return;
@@ -71,15 +80,20 @@ export async function sendSelectedFile() {
 
     console.log("[FILE] sending:", file.name);
 
-    // 🔥 WAIT FOR READY SIGNAL
+    // 🔥 WAIT FOR RECEIVER READY
     while (!window.receiverReady) {
         await new Promise(r => setTimeout(r, 100));
     }
 
+    // wait for channel open
     while (dataChannel.readyState !== "open") {
         await new Promise(r => setTimeout(r, 50));
     }
 
+    // start timer
+    startTime = Date.now();
+
+    // send meta
     dataChannel.send(JSON.stringify({
         type: "file-meta",
         name: file.name,
@@ -91,6 +105,7 @@ export async function sendSelectedFile() {
 
     while (offset < file.size) {
 
+        // 🔥 FLOW CONTROL
         while (dataChannel.bufferedAmount > 1 * 1024 * 1024) {
             await new Promise(r => setTimeout(r, 50));
         }
@@ -100,8 +115,24 @@ export async function sendSelectedFile() {
 
         dataChannel.send(buffer);
         offset += chunkSize;
+
+        // 🔥 PROGRESS + SPEED
+        const progress = Math.floor((offset / file.size) * 100);
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = (offset / 1024 / 1024) / elapsed;
+
+        const bar = document.querySelector(".progress-bar-fill");
+        if (bar) bar.style.width = progress + "%";
+
+        const stats = document.querySelectorAll(".font-mono span");
+        if (stats.length >= 3) {
+            stats[0].innerText = progress + "%";
+            stats[1].innerText = speed.toFixed(2) + " MB/s";
+        }
     }
 
+    // end
     dataChannel.send(JSON.stringify({ type: "file-end" }));
 
     console.log("[FILE] sent complete");
