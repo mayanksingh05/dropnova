@@ -18,15 +18,21 @@ window.handleFileSelect = async function (event) {
 // ✅ REQUIRED by sending.js (this was missing)
 export async function sendSelectedFile() {
     const file = window.selectedFile;
+    if (!file) return;
 
-    if (!file) {
-        console.error("No file selected");
-        return;
-    }
+    window.lastSentFile = file;
 
     console.log("📤 Sending:", file.name);
 
-    // send metadata
+    // ✅ WAIT UNTIL CHANNEL IS REALLY READY
+    while (dataChannel.readyState !== "open") {
+        await new Promise(r => setTimeout(r, 50));
+    }
+
+    // ✅ SMALL DELAY (VERY IMPORTANT)
+    await new Promise(r => setTimeout(r, 200));
+
+    // send metadata FIRST
     dataChannel.send(JSON.stringify({
         type: "file-meta",
         name: file.name,
@@ -37,6 +43,12 @@ export async function sendSelectedFile() {
     let offset = 0;
 
     while (offset < file.size) {
+
+        // ✅ STRICT FLOW CONTROL
+        while (dataChannel.bufferedAmount > 1 * 1024 * 1024) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+
         const chunk = file.slice(offset, offset + chunkSize);
         const buffer = await chunk.arrayBuffer();
 
@@ -44,11 +56,12 @@ export async function sendSelectedFile() {
         offset += chunkSize;
     }
 
+    // end signal
     dataChannel.send(JSON.stringify({ type: "file-end" }));
 
     console.log("✅ File sent");
 
     if (window.router) {
-        window.router.navigate("completed");
+        router.navigate("completed");
     }
 }

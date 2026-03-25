@@ -1,5 +1,13 @@
 // frontend/screens/completed.js
-export const Completed = () => `
+export const Completed = () => {
+    const file = window.lastSentFile || {};
+
+    const fileName = file.name || "Unknown file";
+    const fileSize = file.size
+        ? (file.size / (1024 * 1024)).toFixed(2) + " MB"
+        : "";
+
+    return `
     <div class="w-full text-center space-y-8">
         <div class="relative inline-block">
             <div class="w-24 h-24 bg-success/20 rounded-full flex items-center justify-center text-4xl animate-bounce">
@@ -14,8 +22,8 @@ export const Completed = () => `
         </div>
 
         <div class="p-4 glass-card inline-block mx-auto text-left">
-            <p class="text-sm font-bold opacity-80">vacation_vlog_2024.mp4</p>
-            <p class="text-xs opacity-50">142.5 MB • Sent Successfully</p>
+            <p class="text-sm font-bold opacity-80">${fileName}</p>
+            <p class="text-xs opacity-50">${fileSize} • Sent Successfully</p>
         </div>
 
         <div class="space-y-3 w-full">
@@ -27,4 +35,5 @@ export const Completed = () => `
             </button>
         </div>
     </div>
-`;
+    `;
+};
