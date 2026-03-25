@@ -62,80 +62,86 @@ window.handleIncomingData = function (data) {
 
 // ================= FILE SELECT =================
 window.handleFileSelect = async function (event) {
-    const file = event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
 
-    window.selectedFile = file;
+    if (!window.fileQueue) window.fileQueue = [];
+
+    window.fileQueue.push(...files);
 
     router.navigate("sending");
 };
 
-
 // ================= SENDER =================
 export async function sendSelectedFile() {
-    const file = window.selectedFile;
-    if (!file) return;
 
-    window.lastSentFile = file;
+    // 🔥 MULTI FILE QUEUE SUPPORT
+    if (!window.fileQueue || window.fileQueue.length === 0) return;
 
-    console.log("[FILE] sending:", file.name);
+    while (window.fileQueue.length > 0) {
 
-    // 🔥 WAIT FOR RECEIVER READY
-    while (!window.receiverReady) {
-        await new Promise(r => setTimeout(r, 100));
-    }
+        const file = window.fileQueue.shift();
+        window.lastSentFile = file;
 
-    // wait for channel open
-    while (dataChannel.readyState !== "open") {
-        await new Promise(r => setTimeout(r, 50));
-    }
+        console.log("[FILE] sending:", file.name);
 
-    // start timer
-    startTime = Date.now();
+        // 🔥 WAIT FOR RECEIVER READY (ONLY FIRST TIME NEEDED)
+        while (!window.receiverReady) {
+            await new Promise(r => setTimeout(r, 100));
+        }
 
-    // send meta
-    dataChannel.send(JSON.stringify({
-        type: "file-meta",
-        name: file.name,
-        size: file.size
-    }));
-
-    const chunkSize = 16 * 1024;
-    let offset = 0;
-
-    while (offset < file.size) {
-
-        // 🔥 FLOW CONTROL
-        while (dataChannel.bufferedAmount > 1 * 1024 * 1024) {
+        // wait for channel open
+        while (dataChannel.readyState !== "open") {
             await new Promise(r => setTimeout(r, 50));
         }
 
-        const chunk = file.slice(offset, offset + chunkSize);
-        const buffer = await chunk.arrayBuffer();
+        startTime = Date.now();
 
-        dataChannel.send(buffer);
-        offset += chunkSize;
+        // send meta
+        dataChannel.send(JSON.stringify({
+            type: "file-meta",
+            name: file.name,
+            size: file.size
+        }));
 
-        // 🔥 PROGRESS + SPEED
-        const progress = Math.floor((offset / file.size) * 100);
+        const chunkSize = 16 * 1024;
+        let offset = 0;
 
-        const elapsed = (Date.now() - startTime) / 1000;
-        const speed = (offset / 1024 / 1024) / elapsed;
+        while (offset < file.size) {
 
-        const bar = document.querySelector(".progress-bar-fill");
-        if (bar) bar.style.width = progress + "%";
+            // FLOW CONTROL
+            while (dataChannel.bufferedAmount > 1 * 1024 * 1024) {
+                await new Promise(r => setTimeout(r, 50));
+            }
 
-        const stats = document.querySelectorAll(".font-mono span");
-        if (stats.length >= 3) {
-            stats[0].innerText = progress + "%";
-            stats[1].innerText = speed.toFixed(2) + " MB/s";
+            const chunk = file.slice(offset, offset + chunkSize);
+            const buffer = await chunk.arrayBuffer();
+
+            dataChannel.send(buffer);
+            offset += chunkSize;
+
+            // 🔥 PROGRESS + SPEED
+            const progress = Math.floor((offset / file.size) * 100);
+
+            const elapsed = (Date.now() - startTime) / 1000;
+            const speed = (offset / 1024 / 1024) / elapsed;
+
+            const bar = document.querySelector(".progress-bar-fill");
+            if (bar) bar.style.width = progress + "%";
+
+            const stats = document.querySelectorAll(".font-mono span");
+            if (stats.length >= 3) {
+                stats[0].innerText = progress + "%";
+                stats[1].innerText = speed.toFixed(2) + " MB/s";
+            }
         }
+
+        // file end
+        dataChannel.send(JSON.stringify({ type: "file-end" }));
+
+        console.log("[FILE] sent:", file.name);
     }
 
-    // end
-    dataChannel.send(JSON.stringify({ type: "file-end" }));
-
-    console.log("[FILE] sent complete");
-
+    // after ALL files done
     router.navigate("completed");
 }

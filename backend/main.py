@@ -10,6 +10,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
 
     if room_id not in rooms:
         rooms[room_id] = []
+    # ❌ LIMIT TO 2 USERS
+    if len(rooms[room_id]) >= 2:
+        await websocket.close()
+        return
 
     rooms[room_id].append(websocket)
 

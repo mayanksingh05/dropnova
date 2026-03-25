@@ -28,11 +28,10 @@ export const router = {
             const screenFn = this.screens[screenName];
             if (screenFn) {
                 root.innerHTML = screenFn(props);
-                // Re-initialize specific components like QR or event listeners
-                this.initScreenLogic(screenName, props);
+                // ❌ REMOVED initScreenLogic (no longer needed)
             }
             root.style.opacity = '1';
             root.className = "pt-24 pb-12 px-4 max-w-md mx-auto min-h-screen flex flex-col items-center justify-center screen-fade-in";
         }, 200);
-    },
+    }
 };

@@ -22,7 +22,7 @@ export const Send = () => {
     window.socket = socket;
 
     // 🔥 DELAY UNTIL DOM EXISTS
-    setTimeout(() => {
+    requestAnimationFrame(() => {
         const qrContainer = document.getElementById("qrcode");
         if (!qrContainer) return;
 
@@ -33,7 +33,7 @@ export const Send = () => {
             width: 180,
             height: 180
         });
-    }, 50); // small safe delay
+    });
 
     return `
     <div class="w-full text-center space-y-8">
