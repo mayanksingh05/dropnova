@@ -7,6 +7,8 @@ const config = {
     ]
 };
 
+let isReadyToReceive = false;
+
 export function createConnection(socket, isSender, onConnected) {
     peerConnection = new RTCPeerConnection(config);
 
@@ -17,12 +19,11 @@ export function createConnection(socket, isSender, onConnected) {
     function safeConnect() {
         if (!connected) {
             connected = true;
-            console.log("✅ CONNECTED");
+            console.log("[RTC] ✅ CONNECTED");
             onConnected && onConnected();
         }
     }
 
-    // ICE sending
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
             socket.send(JSON.stringify({
@@ -32,9 +33,8 @@ export function createConnection(socket, isSender, onConnected) {
         }
     };
 
-    // ICE state
     peerConnection.oniceconnectionstatechange = () => {
-        console.log("ICE:", peerConnection.iceConnectionState);
+        console.log("[RTC] ICE:", peerConnection.iceConnectionState);
 
         if (
             peerConnection.iceConnectionState === "connected" ||
@@ -44,15 +44,27 @@ export function createConnection(socket, isSender, onConnected) {
         }
     };
 
-    // DataChannel setup
     function setupChannel(channel) {
         dataChannel = channel;
 
-        console.log("📡 DataChannel ready");
+        console.log("[RTC] 📡 DataChannel ready");
 
         dataChannel.onopen = () => {
-            console.log("🔥 DataChannel OPEN");
+            console.log("[RTC] 🔥 DataChannel OPEN");
             safeConnect();
+
+            // receiver sends READY
+            if (!isSender) {
+                console.log("[FILE] sending ready-to-receive");
+                dataChannel.send(JSON.stringify({ type: "ready-to-receive" }));
+            }
+        };
+
+        // 🔥 RECEIVE LOGIC
+        dataChannel.onmessage = (event) => {
+            if (window.handleIncomingData) {
+                window.handleIncomingData(event.data);
+            }
         };
     }
 
@@ -64,10 +76,9 @@ export function createConnection(socket, isSender, onConnected) {
         };
     }
 
-    // signaling
     socket.addEventListener("message", async (msg) => {
         const data = JSON.parse(msg.data);
-        console.log("📩", data);
+        console.log("[WS]", data);
 
         if (data.type === "offer") {
             await peerConnection.setRemoteDescription(data.offer);
@@ -105,16 +116,10 @@ export function createConnection(socket, isSender, onConnected) {
             }
         }
 
-        // 🔥 sender starts ONLY when receiver joins
         if (data.type === "join" && isSender) {
             startOffer(socket);
         }
     });
-
-    // receiver announces ready
-    if (!isSender) {
-        socket.send(JSON.stringify({ type: "ready" }));
-    }
 }
 
 async function startOffer(socket) {

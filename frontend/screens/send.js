@@ -21,8 +21,11 @@ export const Send = () => {
 
     window.socket = socket;
 
+    // 🔥 DELAY UNTIL DOM EXISTS
     setTimeout(() => {
         const qrContainer = document.getElementById("qrcode");
+        if (!qrContainer) return;
+
         qrContainer.innerHTML = "";
 
         new QRCode(qrContainer, {
@@ -30,7 +33,7 @@ export const Send = () => {
             width: 180,
             height: 180
         });
-    }, 0);
+    }, 50); // small safe delay
 
     return `
     <div class="w-full text-center space-y-8">

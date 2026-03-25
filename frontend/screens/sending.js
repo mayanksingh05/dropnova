@@ -12,9 +12,17 @@ export const Sending = () => {
     const fileName = selectedFile ? selectedFile.name : "Unknown file";
     const fileSize = selectedFile ? formatFileSize(selectedFile.size) : "--";
 
-    setTimeout(() => {
+    // 🔥 WAIT FOR READY FLAG INSTEAD
+    async function waitAndSend() {
+        while (!window.receiverReady) {
+            await new Promise(r => setTimeout(r, 100));
+        }
+
+        console.log("[FILE] starting after ready");
         sendSelectedFile();
-    }, 100);
+    }
+
+    waitAndSend();
 
     return `
     <div class="w-full space-y-8">

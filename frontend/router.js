@@ -35,16 +35,4 @@ export const router = {
             root.className = "pt-24 pb-12 px-4 max-w-md mx-auto min-h-screen flex flex-col items-center justify-center screen-fade-in";
         }, 200);
     },
-
-    initScreenLogic(screenName, props) {
-        if (screenName === 'send') {
-            new QRCode(document.getElementById("qrcode"), {
-                text: "https://dropnova.app/pair/123456",
-                width: 200,
-                height: 200,
-                colorDark: "#6366f1",
-                colorLight: "transparent"
-            });
-        }
-    }
 };

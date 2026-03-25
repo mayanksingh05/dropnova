@@ -1,38 +1,85 @@
 import { dataChannel } from "./webrtc.js";
 
-// ✅ used by connected.js (onclick)
+let incomingFile = null;
+let receivedBuffers = [];
+let receivedSize = 0;
+
+// 🔥 RECEIVER HANDLER
+window.handleIncomingData = function (data) {
+
+    if (typeof data === "string") {
+        const msg = JSON.parse(data);
+
+        if (msg.type === "file-meta") {
+            console.log("[FILE] meta received", msg.name);
+
+            incomingFile = msg;
+            receivedBuffers = [];
+            receivedSize = 0;
+
+            router.navigate("receiving");
+        }
+
+        if (msg.type === "file-end") {
+            console.log("[FILE] complete");
+
+            const blob = new Blob(receivedBuffers);
+
+            // store file
+            if (!window.receivedFiles) window.receivedFiles = [];
+
+            window.receivedFiles.push({
+                name: incomingFile.name,
+                size: incomingFile.size,
+                blob
+            });
+
+            router.navigate("completed");
+        }
+
+        if (msg.type === "ready-to-receive") {
+            console.log("[FILE] receiver ready");
+            window.receiverReady = true;
+        }
+
+    } else {
+        receivedBuffers.push(data);
+        receivedSize += data.byteLength;
+
+        console.log("[FILE] chunk", receivedSize);
+    }
+};
+
+
+// sender select
 window.handleFileSelect = async function (event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    window.selectedFile = file; // store globally
+    window.selectedFile = file;
 
-    console.log("File selected:", file.name);
-
-    // optional: navigate if you have sending screen
-    if (window.router) {
-        window.router.navigate("sending");
-    }
+    router.navigate("sending");
 };
 
-// ✅ REQUIRED by sending.js (this was missing)
+
+// sender send
 export async function sendSelectedFile() {
     const file = window.selectedFile;
     if (!file) return;
 
     window.lastSentFile = file;
 
-    console.log("📤 Sending:", file.name);
+    console.log("[FILE] sending:", file.name);
 
-    // ✅ WAIT UNTIL CHANNEL IS REALLY READY
+    // 🔥 WAIT FOR READY SIGNAL
+    while (!window.receiverReady) {
+        await new Promise(r => setTimeout(r, 100));
+    }
+
     while (dataChannel.readyState !== "open") {
         await new Promise(r => setTimeout(r, 50));
     }
 
-    // ✅ SMALL DELAY (VERY IMPORTANT)
-    await new Promise(r => setTimeout(r, 200));
-
-    // send metadata FIRST
     dataChannel.send(JSON.stringify({
         type: "file-meta",
         name: file.name,
@@ -44,7 +91,6 @@ export async function sendSelectedFile() {
 
     while (offset < file.size) {
 
-        // ✅ STRICT FLOW CONTROL
         while (dataChannel.bufferedAmount > 1 * 1024 * 1024) {
             await new Promise(r => setTimeout(r, 50));
         }
@@ -56,12 +102,9 @@ export async function sendSelectedFile() {
         offset += chunkSize;
     }
 
-    // end signal
     dataChannel.send(JSON.stringify({ type: "file-end" }));
 
-    console.log("✅ File sent");
+    console.log("[FILE] sent complete");
 
-    if (window.router) {
-        router.navigate("completed");
-    }
+    router.navigate("completed");
 }
