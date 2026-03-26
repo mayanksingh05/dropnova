@@ -34,11 +34,15 @@ document.addEventListener('DOMContentLoaded', () => {
     router.navigate('home');
 });
 
-// 🔥 FIXED DISCONNECT
+// ================= GLOBALS =================
 window.cleanupConnection = cleanupConnection;
+window.isManualDisconnect = false;
 
+// ================= MANUAL DISCONNECT =================
 window.handleDisconnect = function () {
     console.log("[RTC] manual disconnect");
+
+    window.isManualDisconnect = true;
 
     try {
         if (dataChannel && dataChannel.readyState === "open") {
@@ -47,6 +51,21 @@ window.handleDisconnect = function () {
     } catch {}
 
     cleanupConnection();
+
+    window.disconnectMessage = "You disconnected";
+    router.navigate("home");
+};
+
+// ================= PEER DISCONNECT =================
+window.handlePeerDisconnect = function () {
+    // 🔥 prevent double trigger
+    if (window.isManualDisconnect) return;
+
+    console.log("[APP] peer disconnected");
+
+    cleanupConnection();
+
+    window.disconnectMessage = "Other user disconnected";
 
     router.navigate("home");
 };

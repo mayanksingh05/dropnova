@@ -1,6 +1,10 @@
 export const Connected = () => {
     const isSender = window.isSender;
 
+    const mode = window.connectionMode === "relay"
+        ? "🌐 Global Mode (slower)"
+        : "⚡ Fast Mode (same network)";
+
     return `
     <div class="w-full text-center space-y-10">
 
@@ -12,7 +16,11 @@ export const Connected = () => {
 
         <div class="space-y-2">
             <h2 class="text-2xl font-bold">Devices Connected</h2>
-            <p class="text-green-400 text-sm">Secure P2P channel ready</p>
+            <p class="text-green-400 text-sm">Secure connection established</p>
+            <p class="text-xs opacity-70">${mode}</p>
+            <p class="text-xs opacity-50">
+                Tip: Same WiFi / Hotspot = much faster ⚡
+            </p>
         </div>
 
         ${
