@@ -7,13 +7,11 @@ function generateCode() {
 export const Send = () => {
     const code = generateCode();
 
-    const socket = new WebSocket(`ws://127.0.0.1:8000/ws/${code}`);
+    const socket = new WebSocket(`ws://${location.hostname}:8000/ws/${code}`);
 
     socket.onopen = () => {
         console.log("Sender connected");
-
         window.isSender = true;
-
         createConnection(socket, true, () => {
             router.navigate("connected");
         });

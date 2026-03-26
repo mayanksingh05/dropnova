@@ -45,19 +45,23 @@ window.handleIncomingData = function (data) {
 
             if (!window.receivedFiles) window.receivedFiles = [];
 
-            // 🔥 PERSIST (DO NOT CLEAR)
             window.receivedFiles.push({
                 name: incomingFile.name,
                 size: incomingFile.size,
                 blob
             });
 
+            // 🔥 SEND ACK BACK
+            if (dataChannel && dataChannel.readyState === "open") {
+                dataChannel.send(JSON.stringify({ type: "file-received" }));
+            }
+
             router.navigate("completed");
         }
 
-        if (msg.type === "ready-to-receive") {
-            console.log("[FILE] receiver ready");
-            window.receiverReady = true;
+        if (msg.type === "file-received") {
+            console.log("[FILE] receiver confirmed");
+            window.fileAckReceived = true;
         }
         if (msg.type === "disconnect") {
             console.log("[RTC] peer disconnected");
@@ -141,7 +145,7 @@ export async function sendSelectedFile() {
             size: file.size
         }));
 
-        const chunkSize = 16 * 1024;
+        const chunkSize = 64 * 1024; // or even 128KB later
         let offset = 0;
 
         while (offset < file.size) {
@@ -153,8 +157,8 @@ export async function sendSelectedFile() {
             }
 
             // FLOW CONTROL
-            while (dataChannel.bufferedAmount > 1 * 1024 * 1024) {
-                await new Promise(r => setTimeout(r, 50));
+            while (dataChannel.bufferedAmount > 4 * 1024 * 1024) {
+                await new Promise(r => setTimeout(r, 5));
             }
 
             const chunk = file.slice(offset, offset + chunkSize);
@@ -181,6 +185,11 @@ export async function sendSelectedFile() {
 
         // file end
         dataChannel.send(JSON.stringify({ type: "file-end" }));
+        // 🔥 WAIT FOR RECEIVER CONFIRMATION
+        window.fileAckReceived = false;
+        while (!window.fileAckReceived) {
+            await new Promise(r => setTimeout(r, 50));
+        }
 
         console.log("[FILE] sent:", file.name);
     }

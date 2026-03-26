@@ -32,3 +32,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
 
     except WebSocketDisconnect:
         rooms[room_id].remove(websocket)
+
+        # 🔥 notify remaining peer
+        for conn in rooms.get(room_id, []):
+            try:
+                await conn.send_text('{"type":"peer-disconnected"}')
+            except:
+                pass

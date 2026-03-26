@@ -202,6 +202,13 @@ export function createConnection(socket, isSender, onConnected) {
         if (data.type === "join" && isSender) {
             startOffer(socket);
         }
+        if (data.type === "peer-disconnected") {
+            console.log("[WS] peer disconnected");
+
+            if (window.handlePeerDisconnect) {
+                window.handlePeerDisconnect();
+            }
+        }
     });
 }
 export function cleanupConnection() {
