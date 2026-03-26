@@ -59,7 +59,18 @@ window.handleIncomingData = function (data) {
             console.log("[FILE] receiver ready");
             window.receiverReady = true;
         }
+        if (msg.type === "disconnect") {
+            console.log("[RTC] peer disconnected");
 
+            if (window.cleanupConnection) {
+                window.cleanupConnection();
+            }
+
+            window.disconnectMessage = "Connection closed";
+
+            router.navigate("home");
+            return;
+        }
     } else {
         receivedBuffers.push(data);
         receivedSize += data.byteLength;

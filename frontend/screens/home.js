@@ -1,4 +1,7 @@
 // frontend/screens/home.js
+const message = window.disconnectMessage || "";
+window.disconnectMessage = null;
+
 export const Home = () => `
     <div class="text-center w-full space-y-8">
         <div class="space-y-2">
@@ -29,5 +32,10 @@ export const Home = () => `
                 Get Android App
             </button>
         </div>
+        ${message ? `
+        <div class="p-3 rounded-xl bg-red-500/10 text-red-400 text-sm">
+            ${message}
+        </div>
+        ` : ""}
     </div>
 `;

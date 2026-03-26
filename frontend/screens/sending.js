@@ -52,7 +52,7 @@ export const Sending = () => {
             </div>
         </div>
 
-        <button onclick="router.navigate('connected')" class="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-red-400 font-bold hover:bg-red-500/10 transition-colors">
+        <button onclick="handleDisconnect()" class="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-red-400 font-bold hover:bg-red-500/10 transition-colors">
             Cancel Transfer
         </button>
     </div>

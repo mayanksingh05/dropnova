@@ -159,7 +159,19 @@ export function createConnection(socket, isSender, onConnected) {
         }
     });
 }
+export function cleanupConnection() {
+    console.log("[RTC] cleanup");
 
+    try { peerConnection?.close(); } catch {}
+    try { dataChannel?.close(); } catch {}
+
+    if (window.pingInterval) {
+        clearInterval(window.pingInterval);
+        window.pingInterval = null;
+    }
+
+    window.receiverReady = false;
+}
 // ================= OFFER =================
 async function startOffer(socket) {
     const offer = await peerConnection.createOffer();

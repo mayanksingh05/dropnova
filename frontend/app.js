@@ -1,9 +1,11 @@
 // frontend/app.js
 import { router } from './router.js';
 import './fileTransfer.js';
+import { cleanupConnection, dataChannel } from './webrtc.js';
+
 document.addEventListener('DOMContentLoaded', () => {
-    window.router = router; // Global access for inline onclicks
-    
+    window.router = router;
+
     const themeToggle = document.getElementById('theme-toggle');
     const html = document.documentElement;
 
@@ -18,7 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateThemeIcons(isDark);
     };
 
-    // Load saved theme
     const savedTheme = localStorage.getItem('theme') || 'dark';
     if (savedTheme === 'light') {
         html.classList.remove('dark');
@@ -30,6 +31,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     themeToggle.addEventListener('click', toggleTheme);
 
-    // Initial Route
     router.navigate('home');
 });
+
+// 🔥 FIXED DISCONNECT
+window.cleanupConnection = cleanupConnection;
+
+window.handleDisconnect = function () {
+    console.log("[RTC] manual disconnect");
+
+    try {
+        if (dataChannel && dataChannel.readyState === "open") {
+            dataChannel.send(JSON.stringify({ type: "disconnect" }));
+        }
+    } catch {}
+
+    cleanupConnection();
+
+    router.navigate("home");
+};

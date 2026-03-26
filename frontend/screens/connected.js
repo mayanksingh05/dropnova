@@ -39,7 +39,7 @@ export const Connected = () => {
             `
         }
 
-        <button onclick="router.navigate('home')" 
+        <button onclick="handleDisconnect()" 
         class="text-red-400 text-sm hover:underline">
             Disconnect
         </button>
