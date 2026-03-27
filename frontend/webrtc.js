@@ -85,7 +85,6 @@ export function createConnection(socket, isSender, onConnected) {
         if (state === "disconnected") {
             console.log("[RTC] temporary disconnect... trying to recover");
 
-            // ❌ DO NOT reconnect if manual disconnect
             if (window.isManualDisconnect || window.peerManuallyDisconnected) {
                 console.log("[RTC] skip reconnect (manual)");
                 return;
@@ -95,7 +94,6 @@ export function createConnection(socket, isSender, onConnected) {
                 if (peerConnection.iceConnectionState === "disconnected") {
                     console.log("[RTC] still disconnected → reconnecting");
 
-                    // ❌ again guard
                     if (window.isManualDisconnect || window.peerManuallyDisconnected) {
                         console.log("[RTC] reconnect blocked");
                         return;
@@ -158,7 +156,6 @@ export function createConnection(socket, isSender, onConnected) {
                 clearInterval(window.pingInterval);
             }
 
-            // ❌ prevent false trigger
             if (window.isManualDisconnect) {
                 console.log("[RTC] ignore close (manual)");
                 return;
@@ -180,7 +177,7 @@ export function createConnection(socket, isSender, onConnected) {
     }
 
     // ================= SIGNALING =================
-    socket.addEventListener("message", async (msg) => {
+    socket.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);
         console.log("[WS]", data);
 

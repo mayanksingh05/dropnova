@@ -30,9 +30,9 @@ export const router = {
             ["connected", "sending", "receiving"].includes(currentScreen) &&
             screenName === "home"
         ) {
-            if (window.handleDisconnect) {
+            if (!window.isManualDisconnect && window.handleDisconnect) {
                 window.handleDisconnect();
-                return; // prevent double navigation
+                return;
             }
         }
 

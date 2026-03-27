@@ -51,7 +51,7 @@ window.handleDisconnect = function () {
     console.log("[RTC] manual disconnect");
 
     window.isManualDisconnect = true;
-    window.peerManuallyDisconnected = false; // 🔥 important
+    window.peerManuallyDisconnected = false;
 
     try {
         if (dataChannel && dataChannel.readyState === "open") {
