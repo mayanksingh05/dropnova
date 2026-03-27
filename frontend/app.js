@@ -54,14 +54,14 @@ window.handleDisconnect = function () {
     window.peerManuallyDisconnected = true;
 
     try {
-        if (dataChannel && dataChannel.readyState === "open") {
+        if (dataChannel?.readyState === "open") {
             dataChannel.send(JSON.stringify({ type: "disconnect" }));
         }
     } catch {}
 
     cleanupConnection();
 
-    alert("Disconnected");
+    showPopup("You disconnected");
 
     router.navigate("home");
 };
@@ -85,4 +85,15 @@ window.cancelReconnect = function () {
     cleanupConnection();
 
     router.navigate("home");
+};
+window.showPopup = function (message) {
+    const div = document.createElement("div");
+    div.className = "fixed top-20 left-1/2 -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-xl z-50 shadow-lg text-sm";
+    div.innerText = message;
+
+    document.body.appendChild(div);
+
+    setTimeout(() => {
+        div.remove();
+    }, 3000);
 };

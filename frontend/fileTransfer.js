@@ -27,6 +27,17 @@ window.handleIncomingData = function (data) {
 
         // ================= FILE META =================
         if (msg.type === "file-meta") {
+            // 🔥 RESET UI TO 0%
+            setTimeout(() => {
+                const bar = document.querySelector(".progress-bar-fill");
+                if (bar) bar.style.width = "0%";
+
+                const stats = document.querySelectorAll(".font-mono span");
+                if (stats.length >= 3) {
+                    stats[0].innerText = "0%";
+                    stats[1].innerText = "0 MB/s";
+                }
+            }, 50);
             console.log("[FILE] meta received:", msg.name);
 
             incomingFile = msg;
@@ -108,7 +119,7 @@ window.handleIncomingData = function (data) {
 
             window.cleanupConnection?.();
 
-            window.disconnectMessage = "Other user disconnected";
+            showPopup("Other user disconnected");
 
             router.navigate("home");
             return;
