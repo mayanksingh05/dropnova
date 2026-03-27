@@ -55,6 +55,9 @@ window.handleIncomingData = function (data) {
             if (dataChannel && dataChannel.readyState === "open") {
                 dataChannel.send(JSON.stringify({ type: "file-received" }));
             }
+            // 🔥 FORCE 100% UI
+            const bar = document.querySelector(".progress-bar-fill");
+            if (bar) bar.style.width = "100%";
 
             router.navigate("completed");
         }
@@ -84,24 +87,31 @@ window.handleIncomingData = function (data) {
     } else {
         receivedBuffers.push(data);
         receivedSize += data.byteLength;
-        window.resumeOffset = receivedSize;
 
-        console.log("[FILE] chunk:", receivedSize);
+        // 🔥 SMOOTH UI UPDATE (throttled)
+        if (!window.lastUIUpdate) window.lastUIUpdate = 0;
 
-        // 🔥 RECEIVER PROGRESS + SPEED
-        if (incomingFile) {
-            const progress = Math.floor((receivedSize / incomingFile.size) * 100);
+        const now = Date.now();
+        if (now - window.lastUIUpdate > 100) { // update every 100ms
+            window.lastUIUpdate = now;
 
-            const elapsed = (Date.now() - startTime) / 1000;
-            const speed = (receivedSize / 1024 / 1024) / elapsed;
+            if (incomingFile) {
+                const progress = Math.floor((receivedSize / incomingFile.size) * 100);
 
-            const bar = document.querySelector(".progress-bar-fill");
-            if (bar) bar.style.width = progress + "%";
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = (receivedSize / 1024 / 1024) / elapsed;
 
-            const stats = document.querySelectorAll(".font-mono span");
-            if (stats.length >= 3) {
-                stats[0].innerText = progress + "%";
-                stats[1].innerText = speed.toFixed(2) + " MB/s";
+                const bar = document.querySelector(".progress-bar-fill");
+                if (bar) {
+                    bar.style.transition = "width 0.1s linear"; // 🔥 smooth animation
+                    bar.style.width = progress + "%";
+                }
+
+                const stats = document.querySelectorAll(".font-mono span");
+                if (stats.length >= 3) {
+                    stats[0].innerText = progress + "%";
+                    stats[1].innerText = speed.toFixed(2) + " MB/s";
+                }
             }
         }
     }
@@ -179,7 +189,7 @@ export async function sendSelectedFile() {
             }
 
             // 🔥 wait for buffer to drain
-            await new Promise(r => setTimeout(r, 1));
+            await new Promise(r => setTimeout(r, 2));
 
             // progress update
             const progress = Math.floor((offset / file.size) * 100);

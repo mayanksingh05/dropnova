@@ -71,11 +71,6 @@ export const Completed = () => {
             class="w-full py-4 rounded-2xl bg-primary text-white font-bold hover:scale-[1.02] transition-all">
                 ${actionText}
             </button>
-
-            <button onclick="router.navigate('home')" 
-            class="w-full py-4 rounded-2xl bg-white/5 border border-white/10 font-bold hover:bg-white/10 transition-colors">
-                Back to Home
-            </button>
         </div>
 
     </div>

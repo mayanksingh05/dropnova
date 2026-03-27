@@ -22,20 +22,7 @@ export const router = {
     
     navigate(screenName, props = {}) {
 
-        // 🔥 AUTO DISCONNECT when leaving connection screens
-        const currentScreen = window.currentScreen;
-
-        if (
-            currentScreen &&
-            ["connected", "sending", "receiving"].includes(currentScreen) &&
-            screenName === "home"
-        ) {
-            if (!window.isManualDisconnect && window.handleDisconnect) {
-                window.handleDisconnect();
-                return;
-            }
-        }
-
+        // ✅ ONLY track screen (no logic here)
         window.currentScreen = screenName;
         
         setTimeout(() => {

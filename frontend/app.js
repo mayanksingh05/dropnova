@@ -51,7 +51,7 @@ window.handleDisconnect = function () {
     console.log("[RTC] manual disconnect");
 
     window.isManualDisconnect = true;
-    window.peerManuallyDisconnected = false;
+    window.peerManuallyDisconnected = true;
 
     try {
         if (dataChannel && dataChannel.readyState === "open") {
@@ -61,21 +61,28 @@ window.handleDisconnect = function () {
 
     cleanupConnection();
 
-    window.disconnectMessage = "You disconnected";
+    alert("Disconnected");
+
     router.navigate("home");
 };
 
 // ================= PEER DISCONNECT =================
 window.handlePeerDisconnect = function () {
 
+    // ❌ ignore manual cases
     if (window.isManualDisconnect || window.peerManuallyDisconnected) return;
 
-    console.log("[APP] peer/network disconnected");
+    console.log("[APP] network lost → reconnect");
+
+    // ✅ show reconnect screen
+    router.navigate("reconnect");
+};
+window.cancelReconnect = function () {
+    console.log("[RTC] reconnect cancelled");
+
+    window.isManualDisconnect = true;
 
     cleanupConnection();
 
-    window.disconnectMessage = "Connection lost";
-
-    // 🔥 go to reconnect screen instead of home
-    router.navigate("reconnect");
+    router.navigate("home");
 };
