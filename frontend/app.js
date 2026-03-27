@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     themeToggle.addEventListener('click', toggleTheme);
 
+    // 🔥 route based on QR
     const params = new URLSearchParams(window.location.search);
     const screen = params.get("screen");
 
@@ -50,6 +51,7 @@ window.handleDisconnect = function () {
     console.log("[RTC] manual disconnect");
 
     window.isManualDisconnect = true;
+    window.peerManuallyDisconnected = false; // 🔥 important
 
     try {
         if (dataChannel && dataChannel.readyState === "open") {
@@ -65,7 +67,7 @@ window.handleDisconnect = function () {
 
 // ================= PEER DISCONNECT =================
 window.handlePeerDisconnect = function () {
-    // 🔥 prevent double trigger
+
     if (window.isManualDisconnect) return;
 
     console.log("[APP] peer disconnected");

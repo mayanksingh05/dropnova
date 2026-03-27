@@ -18,7 +18,9 @@ const config = {
 };
 
 export function createConnection(socket, isSender, onConnected) {
-
+    window.receiverReady = false;
+    window.fileAckReceived = false;
+    window.peerManuallyDisconnected = false;
     // 🔥 CLEAN PREVIOUS CONNECTION (important for reconnect)
     if (peerConnection) {
         try { peerConnection.close(); } catch {}
@@ -83,10 +85,21 @@ export function createConnection(socket, isSender, onConnected) {
         if (state === "disconnected") {
             console.log("[RTC] temporary disconnect... trying to recover");
 
-            // ⏳ wait before deciding
+            // ❌ DO NOT reconnect if manual disconnect
+            if (window.isManualDisconnect || window.peerManuallyDisconnected) {
+                console.log("[RTC] skip reconnect (manual)");
+                return;
+            }
+
             setTimeout(() => {
                 if (peerConnection.iceConnectionState === "disconnected") {
                     console.log("[RTC] still disconnected → reconnecting");
+
+                    // ❌ again guard
+                    if (window.isManualDisconnect || window.peerManuallyDisconnected) {
+                        console.log("[RTC] reconnect blocked");
+                        return;
+                    }
 
                     if (window.socket) {
                         createConnection(window.socket, window.isSender, () => {
@@ -144,7 +157,13 @@ export function createConnection(socket, isSender, onConnected) {
             if (window.pingInterval) {
                 clearInterval(window.pingInterval);
             }
-            // 🔥 NEW: notify UI
+
+            // ❌ prevent false trigger
+            if (window.isManualDisconnect) {
+                console.log("[RTC] ignore close (manual)");
+                return;
+            }
+
             if (window.handlePeerDisconnect) {
                 window.handlePeerDisconnect();
             }

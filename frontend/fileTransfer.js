@@ -68,7 +68,9 @@ window.handleIncomingData = function (data) {
             window.fileAckReceived = true;
         }
         if (msg.type === "disconnect") {
-            console.log("[RTC] peer disconnected");
+            console.log("[RTC] peer disconnected (manual)");
+
+            window.peerManuallyDisconnected = true;
 
             if (window.cleanupConnection) {
                 window.cleanupConnection();
