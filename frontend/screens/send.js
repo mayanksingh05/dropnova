@@ -19,15 +19,15 @@ export const Send = () => {
 
     window.socket = socket;
 
-    // 🔥 DELAY UNTIL DOM EXISTS
     requestAnimationFrame(() => {
         const qrContainer = document.getElementById("qrcode");
         if (!qrContainer) return;
 
         qrContainer.innerHTML = "";
 
-        new QRCode(qrContainer, {
-            text: code.toString(),
+        const url = `${location.origin}/?screen=receive&code=${code}`;
+        new window.QRCode(qrContainer, {
+            text: url,
             width: 180,
             height: 180
         });

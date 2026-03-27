@@ -31,7 +31,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     themeToggle.addEventListener('click', toggleTheme);
 
-    router.navigate('home');
+    const params = new URLSearchParams(window.location.search);
+    const screen = params.get("screen");
+
+    if (screen === "receive") {
+        router.navigate("receive");
+    } else {
+        router.navigate("home");
+    }
 });
 
 // ================= GLOBALS =================

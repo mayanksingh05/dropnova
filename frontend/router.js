@@ -21,8 +21,22 @@ export const router = {
     },
     
     navigate(screenName, props = {}) {
-        const root = document.getElementById('app-root');
-        root.style.opacity = '0';
+
+        // 🔥 AUTO DISCONNECT when leaving connection screens
+        const currentScreen = window.currentScreen;
+
+        if (
+            currentScreen &&
+            ["connected", "sending", "receiving"].includes(currentScreen) &&
+            screenName === "home"
+        ) {
+            if (window.handleDisconnect) {
+                window.handleDisconnect();
+                return; // prevent double navigation
+            }
+        }
+
+        window.currentScreen = screenName;
         
         setTimeout(() => {
             const screenFn = this.screens[screenName];

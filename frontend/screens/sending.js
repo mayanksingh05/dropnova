@@ -1,5 +1,4 @@
 import { sendSelectedFile } from "../fileTransfer.js";
-import { selectedFile } from "../transfer.js";
 
 function formatFileSize(bytes) {
     if (bytes < 1024) return `${bytes} B`;
@@ -9,13 +8,19 @@ function formatFileSize(bytes) {
 }
 
 export const Sending = () => {
-    const fileName = selectedFile ? selectedFile.name : "Unknown file";
-    const fileSize = selectedFile ? formatFileSize(selectedFile.size) : "--";
+    const currentFile = window.fileQueue && window.fileQueue[0];
+    const fileName = currentFile ? currentFile.name : "Preparing...";
+    const fileSize = currentFile ? formatFileSize(currentFile.size) : "--";
 
     // 🔥 WAIT FOR READY FLAG INSTEAD
     async function waitAndSend() {
-        while (!window.receiverReady) {
+        let waitTime = 0;
+        while (!window.receiverReady && waitTime < 5000) {
             await new Promise(r => setTimeout(r, 100));
+            waitTime += 100;
+        }
+        if (!window.receiverReady) {
+            console.warn("[FILE] receiver not ready, continuing anyway");
         }
 
         console.log("[FILE] starting after ready");

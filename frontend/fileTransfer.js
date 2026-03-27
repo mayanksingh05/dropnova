@@ -8,7 +8,7 @@ let startTime = 0;
 
 // ================= BACKGROUND HANDLING =================
 window.isTabHidden = false;
-
+window.receiverReady = false;
 document.addEventListener("visibilitychange", () => {
     window.isTabHidden = document.hidden;
     console.log("[APP]", document.hidden ? "background" : "active");
@@ -58,7 +58,11 @@ window.handleIncomingData = function (data) {
 
             router.navigate("completed");
         }
-
+        
+        if (msg.type === "ready-to-receive") {
+            console.log("[FILE] receiver ready");
+            window.receiverReady = true;
+        }
         if (msg.type === "file-received") {
             console.log("[FILE] receiver confirmed");
             window.fileAckReceived = true;
@@ -70,7 +74,7 @@ window.handleIncomingData = function (data) {
                 window.cleanupConnection();
             }
 
-            window.disconnectMessage = "Connection closed";
+            window.disconnectMessage = "Other user disconnected";
 
             router.navigate("home");
             return;
@@ -145,7 +149,7 @@ export async function sendSelectedFile() {
             size: file.size
         }));
 
-        const chunkSize = 64 * 1024; // or even 128KB later
+        const chunkSize = 128 * 1024; // or even 128KB later
         let offset = 0;
 
         while (offset < file.size) {
@@ -157,8 +161,8 @@ export async function sendSelectedFile() {
             }
 
             // FLOW CONTROL
-            while (dataChannel.bufferedAmount > 4 * 1024 * 1024) {
-                await new Promise(r => setTimeout(r, 5));
+            if (dataChannel.bufferedAmount > 8 * 1024 * 1024) {
+                await new Promise(r => setTimeout(r, 1));
             }
 
             const chunk = file.slice(offset, offset + chunkSize);

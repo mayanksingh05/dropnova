@@ -115,10 +115,12 @@ export function createConnection(socket, isSender, onConnected) {
             console.log("[RTC] 🔥 DataChannel OPEN");
             safeConnect();
 
-            // receiver sends READY
+            // 🔥 ensure receiverReady always reset correctly
             if (!isSender) {
-                console.log("[FILE] sending ready-to-receive");
-                dataChannel.send(JSON.stringify({ type: "ready-to-receive" }));
+                setTimeout(() => {
+                    console.log("[FILE] sending ready-to-receive");
+                    dataChannel.send(JSON.stringify({ type: "ready-to-receive" }));
+                }, 200); // slight delay for stability
             }
 
             // 🔥 KEEP ALIVE

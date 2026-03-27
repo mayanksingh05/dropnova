@@ -23,7 +23,26 @@ window.connectDevice = function () {
     window.socket = socket;
 };
 
-export const Receive = () => `
+export const Receive = () => {
+
+    // 🔥 run after DOM renders
+    requestAnimationFrame(() => {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+
+        if (code) {
+            const input = document.getElementById("pair-code");
+            if (input) {
+                input.value = code;
+
+                setTimeout(() => {
+                    connectDevice();
+                }, 200);
+            }
+        }
+    });
+
+    return `
 <div class="w-full text-center space-y-8">
 
     <h2 class="text-3xl font-bold tracking-tight">Connect Device</h2>
@@ -41,16 +60,19 @@ export const Receive = () => `
         focus:border-primary outline-none transition"
     >
 
-    <button onclick="connectDevice()" 
-    class="w-full max-w-[260px] py-4 rounded-2xl bg-primary text-white font-bold 
-    shadow-lg hover:scale-[1.03] transition">
-        Connect
-    </button>
+    <div class="space-y-3 w-full max-w-[260px] mx-auto">
+        <button onclick="connectDevice()" 
+        class="w-full py-4 rounded-2xl bg-primary text-white font-bold 
+        shadow-lg hover:scale-[1.03] transition">
+            Connect
+        </button>
 
-    <button onclick="router.navigate('home')" 
-    class="text-sm opacity-50 hover:opacity-100 transition">
-        Back
-    </button>
+        <button onclick="router.navigate('home')" 
+        class="w-full text-sm opacity-50 hover:opacity-100 transition">
+            Back
+        </button>
+    </div>
 
 </div>
 `;
+};
