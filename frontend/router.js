@@ -40,10 +40,17 @@ export const router = {
         
         setTimeout(() => {
             const screenFn = this.screens[screenName];
+
+            const root = document.getElementById("app-root");
+            if (!root) {
+                console.error("[Router] root element not found");
+                return;
+            }
+
             if (screenFn) {
                 root.innerHTML = screenFn(props);
-                // ❌ REMOVED initScreenLogic (no longer needed)
             }
+
             root.style.opacity = '1';
             root.className = "pt-24 pb-12 px-4 max-w-md mx-auto min-h-screen flex flex-col items-center justify-center screen-fade-in";
         }, 200);
