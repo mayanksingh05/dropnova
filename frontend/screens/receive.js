@@ -20,12 +20,20 @@ window.connectDevice = function () {
         });
     };
 
+    socket.onerror = () => {
+        alert("Connection failed. Check network.");
+    };
+
+    socket.onclose = () => {
+        console.log("[WS] closed");
+    };
+
     window.socket = socket;
 };
 
 export const Receive = () => {
 
-    // 🔥 run after DOM renders
+    // 🔥 auto-connect if QR used
     requestAnimationFrame(() => {
         const params = new URLSearchParams(window.location.search);
         const code = params.get("code");
