@@ -84,6 +84,7 @@ window.handleIncomingData = function (data) {
     } else {
         receivedBuffers.push(data);
         receivedSize += data.byteLength;
+        window.resumeOffset = receivedSize;
 
         console.log("[FILE] chunk:", receivedSize);
 
@@ -151,31 +152,37 @@ export async function sendSelectedFile() {
             size: file.size
         }));
 
-        const chunkSize = 128 * 1024; // or even 128KB later
-        let offset = 0;
+        const chunkSize = 128 * 1024;
+        let offset = window.resumeOffset || 0;
+
+        // 🔥 parallel window
+        const maxBuffered = 8 * 1024 * 1024;
 
         while (offset < file.size) {
 
-            // 🔥 PAUSE IF BACKGROUND
+            // pause if background
             while (window.isTabHidden) {
-                console.log("[APP] paused (background)");
                 await new Promise(r => setTimeout(r, 200));
             }
 
-            // FLOW CONTROL
-            if (dataChannel.bufferedAmount > 8 * 1024 * 1024) {
-                await new Promise(r => setTimeout(r, 1));
+            // 🔥 allow multiple chunks before waiting
+            while (
+                dataChannel.bufferedAmount < maxBuffered &&
+                offset < file.size
+            ) {
+                const chunk = file.slice(offset, offset + chunkSize);
+                const buffer = await chunk.arrayBuffer();
+
+                dataChannel.send(buffer);
+                offset += chunkSize;
+                window.resumeOffset = offset;
             }
 
-            const chunk = file.slice(offset, offset + chunkSize);
-            const buffer = await chunk.arrayBuffer();
+            // 🔥 wait for buffer to drain
+            await new Promise(r => setTimeout(r, 1));
 
-            dataChannel.send(buffer);
-            offset += chunkSize;
-
-            // 🔥 PROGRESS + SPEED
+            // progress update
             const progress = Math.floor((offset / file.size) * 100);
-
             const elapsed = (Date.now() - startTime) / 1000;
             const speed = (offset / 1024 / 1024) / elapsed;
 
@@ -198,6 +205,7 @@ export async function sendSelectedFile() {
         }
 
         console.log("[FILE] sent:", file.name);
+        window.resumeOffset = 0;
     }
 
     router.navigate("completed");

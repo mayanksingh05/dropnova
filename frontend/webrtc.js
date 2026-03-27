@@ -227,7 +227,7 @@ export function createConnection(socket, isSender, onConnected) {
                 window.handlePeerDisconnect();
             }
         }
-    });
+    };
 }
 export function cleanupConnection() {
     console.log("[RTC] cleanup");
@@ -239,8 +239,9 @@ export function cleanupConnection() {
         clearInterval(window.pingInterval);
         window.pingInterval = null;
     }
-
     window.receiverReady = false;
+    try { window.socket?.close(); } catch {}
+    window.socket = null;
 }
 // ================= OFFER =================
 async function startOffer(socket) {

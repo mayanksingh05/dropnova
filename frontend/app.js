@@ -68,13 +68,14 @@ window.handleDisconnect = function () {
 // ================= PEER DISCONNECT =================
 window.handlePeerDisconnect = function () {
 
-    if (window.isManualDisconnect) return;
+    if (window.isManualDisconnect || window.peerManuallyDisconnected) return;
 
-    console.log("[APP] peer disconnected");
+    console.log("[APP] peer/network disconnected");
 
     cleanupConnection();
 
-    window.disconnectMessage = "Other user disconnected";
+    window.disconnectMessage = "Connection lost";
 
-    router.navigate("home");
+    // 🔥 go to reconnect screen instead of home
+    router.navigate("reconnect");
 };
