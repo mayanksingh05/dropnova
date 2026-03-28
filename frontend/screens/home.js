@@ -22,6 +22,30 @@ export const Home = () => `
                 <p class="text-sm opacity-60">Get from another device</p>
             </button>
         </div>
+        
+        <div class="w-full mt-10 p-5 rounded-2xl bg-yellow-500/10 border border-yellow-400/20 text-sm text-left space-y-3">
+
+            <p class="font-bold text-yellow-400">⚠ File Size Notice</p>
+
+            <p class="opacity-80">
+                For best performance, send files between <b>1MB – 50MB</b>.
+                Larger files may fail on mobile browsers.
+            </p>
+
+            <p class="opacity-80">
+                For bigger files, use the DropNova app.
+            </p>
+
+            <div class="flex gap-2 pt-2">
+                <button class="flex-1 py-2 rounded-xl bg-primary text-white text-xs">
+                    Download Desktop App
+                </button>
+                <button class="flex-1 py-2 rounded-xl bg-primary text-white text-xs">
+                    Download Android App
+                </button>
+            </div>
+
+        </div>
 
         <div class="pt-8 space-y-4">
             <p class="text-xs uppercase tracking-widest opacity-50 font-bold">Offline Mode</p>

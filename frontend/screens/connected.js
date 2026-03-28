@@ -25,24 +25,32 @@ export const Connected = () => {
 
         ${
             isSender ? `
-            <div class="w-full p-12 border-2 border-dashed border-white/20 
-            rounded-3xl cursor-pointer hover:border-primary transition-all duration-300"
-            onclick="document.getElementById('file-input').click()">
+            <div class="w-full space-y-4">
 
-                <input type="file" id="file-input" class="hidden"
-                onchange="handleFileSelect(event)">
+                <div class="w-full p-12 border-2 border-dashed border-white/20 
+                rounded-3xl cursor-pointer hover:border-primary transition-all duration-300"
+                onclick="document.getElementById('file-input').click()">
 
-                <div class="text-5xl mb-4">📄</div>
-                <p class="font-bold text-lg">Select File</p>
-                <p class="text-sm opacity-60 mt-2">Click to upload</p>
+                    <input type="file" id="file-input" class="hidden" multiple
+                    onchange="handleFileSelect(event)">
+
+                    <div class="text-5xl mb-4">📄</div>
+                    <p class="font-bold text-lg">Select Files</p>
+                    <p class="text-sm opacity-60 mt-2">Multiple supported</p>
+                </div>
+
+                <div id="selected-files" class="w-full space-y-2"></div>
+
+                <div class="w-full space-y-2">
+                    <p class="text-sm opacity-60 text-left">Transfers</p>
+                    <div id="transfer-list" class="space-y-3"></div>
+                </div>
+
             </div>
             ` : `
-            <div class="w-full p-12 border-2 border-dashed border-white/10 
-            rounded-3xl animate-pulse">
-
-                <div class="text-5xl mb-4">📥</div>
-                <p class="font-bold text-lg">Waiting for file</p>
-                <p class="text-sm opacity-60 mt-2">Sender will start transfer</p>
+            <div class="w-full space-y-2">
+                <p class="text-sm opacity-60 text-left">Incoming Files</p>
+                <div id="transfer-list" class="space-y-3"></div>
             </div>
             `
         }
