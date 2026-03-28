@@ -237,15 +237,15 @@ export async function sendSelectedFile() {
 
         window.sentFiles.push(file);
 
-        const sentBox = document.getElementById("sent-files");
+        const sentBox = document.getElementById("transfer-list");
 
         if (sentBox) {
             sentBox.innerHTML += `
-                <div id="file-${fileId}" class="p-4 glass-card space-y-2 text-left">
+                <div id="send-file-${fileId}" class="p-4 glass-card space-y-2 text-left">
                     <p class="font-bold text-sm truncate">${file.name}</p>
 
                     <div class="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-                        <div id="bar-${fileId}" class="h-full bg-primary" style="width:0%"></div>
+                        <div id="bar-send-${fileId}" class="h-full bg-primary" style="width:0%"></div>
                     </div>
 
                     <div class="flex justify-between text-xs font-mono opacity-70">
@@ -301,9 +301,9 @@ export async function sendSelectedFile() {
         }
 
         dataChannel.send(JSON.stringify({ type: "file-end" }));
-        const bar = document.getElementById(`bar-${currentFileId}`);
-        const p = document.getElementById(`percent-${currentFileId}`);
-        const e = document.getElementById(`eta-${currentFileId}`);
+        const bar = document.getElementById(`bar-send-${currentFileId}`);
+        const p = document.getElementById(`percent-send-${currentFileId}`);
+        const e = document.getElementById(`eta-send-${currentFileId}`);
 
         if (bar) bar.style.width = "100%";
         if (p) p.innerText = "100%";

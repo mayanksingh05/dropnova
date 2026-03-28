@@ -9,7 +9,7 @@ const config = {
 
 // 🔥 ADD TURN ONLY IF NEEDED
 setTimeout(() => {
-    if (peerConnection.connectionState === "connected") return;
+    if (!peerConnection || peerConnection.connectionState === "connected") return;
 
     console.log("[RTC] enabling TURN fallback");
 

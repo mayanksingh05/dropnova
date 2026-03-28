@@ -33,18 +33,11 @@ export const Home = () => `
             </p>
 
             <p class="opacity-80">
-                For bigger files, use the DropNova app.
+                For larger files or to share offline without internet, use the DropNova app.
             </p>
-
-            <div class="flex gap-2 pt-2">
-                <button class="flex-1 py-2 rounded-xl bg-primary text-white text-xs">
-                    Download Desktop App
-                </button>
-                <button class="flex-1 py-2 rounded-xl bg-primary text-white text-xs">
-                    Download Android App
-                </button>
-            </div>
-
+            <p class="opacity-80">
+                <b>Download links are available below.</b>
+            </p>
         </div>
 
         <div class="pt-8 space-y-4">
