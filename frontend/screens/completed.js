@@ -4,7 +4,6 @@ export const Completed = () => {
     const isSender = window.isSender;
 
     const files = window.receivedFiles || [];
-    const sentFile = window.lastSentFile || {};
 
     const formatSize = (bytes) => {
         if (!bytes) return "";
@@ -38,12 +37,16 @@ export const Completed = () => {
     `).join("");
 
     // 🔥 SENDER FILE UI
-    const senderBox = `
-        <div class="p-4 glass-card inline-block mx-auto text-left">
-            <p class="text-sm font-bold opacity-80">${sentFile.name || "Unknown file"}</p>
-            <p class="text-xs opacity-50">${formatSize(sentFile.size)} • Sent Successfully</p>
+    const sentFiles = window.sentFiles || [];
+
+    const senderBox = sentFiles.map(file => `
+        <div class="p-4 glass-card flex items-center justify-between gap-4">
+            <div class="text-left min-w-0">
+                <p class="font-bold truncate">${file.name}</p>
+                <p class="text-xs opacity-50">${formatSize(file.size)} • Sent Successfully</p>
+            </div>
         </div>
-    `;
+    `).join("");
 
     return `
     <div class="w-full text-center space-y-8">
