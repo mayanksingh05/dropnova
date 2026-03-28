@@ -112,7 +112,7 @@ window.handleIncomingData = async function (data) {
                 const id = msg.id;
                 const received = msg.received;
 
-                const total = window.lastSentFile.size;
+                const total = currentFileSize;
 
                 const percent = Math.floor((received / total) * 100);
 
@@ -122,10 +122,10 @@ window.handleIncomingData = async function (data) {
                 const remaining = total - received;
                 const eta = speed > 0 ? (remaining / 1024 / 1024 / speed) : 0;
 
-                const bar = document.getElementById(`bar-${id}`);
-                const p = document.getElementById(`percent-${id}`);
-                const s = document.getElementById(`speed-${id}`);
-                const e = document.getElementById(`eta-${id}`);
+                const bar = document.getElementById(`bar-send-${id}`);
+                const p = document.getElementById(`percent-send-${id}`);
+                const s = document.getElementById(`speed-send-${id}`);
+                const e = document.getElementById(`eta-send-${id}`);
 
                 if (bar) bar.style.width = percent + "%";
                 if (p) p.innerText = percent + "%";
@@ -249,9 +249,9 @@ export async function sendSelectedFile() {
                     </div>
 
                     <div class="flex justify-between text-xs font-mono opacity-70">
-                        <span id="percent-${fileId}">0%</span>
-                        <span id="speed-${fileId}">0 MB/s</span>
-                        <span id="eta-${fileId}">--</span>
+                        <span id="percent-send-${fileId}">0%</span>
+                        <span id="speed-send-${fileId}">0 MB/s</span>
+                        <span id="eta-send-${fileId}">--</span>
                     </div>
                 </div>
             `;
