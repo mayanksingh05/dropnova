@@ -77,6 +77,9 @@ export function createConnection(socket, isSender, onConnected) {
     });
 
     function safeConnect() {
+        window.receivedFiles = [];     // 🔥 reset old received files
+        window.lastSentFile = null;    // 🔥 reset sender state
+        window.fileQueue = [];         // 🔥 reset queue
         if (!connected) {
             connected = true;
             window.wasConnectedOnce = true;

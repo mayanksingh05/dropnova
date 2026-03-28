@@ -78,6 +78,9 @@ window.handlePeerDisconnect = function () {
         cleanupConnection();
 
         showPopup("Other user disconnected");
+        window.receivedFiles = [];
+        window.lastSentFile = null;
+        window.fileQueue = [];
 
         router.navigate("home");
         return;
