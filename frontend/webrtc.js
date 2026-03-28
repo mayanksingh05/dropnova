@@ -3,19 +3,32 @@ export let dataChannel;
 
 const config = {
     iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject"
-        },
-        {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject"
-        }
+        { urls: "stun:stun.l.google.com:19302" }
     ]
 };
+
+// 🔥 ADD TURN ONLY IF NEEDED
+setTimeout(() => {
+    if (peerConnection.connectionState === "connected") return;
+
+    console.log("[RTC] enabling TURN fallback");
+
+    peerConnection.setConfiguration({
+        iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            {
+                urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            },
+            {
+                urls: "turn:openrelay.metered.ca:443",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            }
+        ]
+    });
+}, 2000);
 
 export function createConnection(socket, isSender, onConnected) {
     window.receiverReady = false;
@@ -30,7 +43,12 @@ export function createConnection(socket, isSender, onConnected) {
         clearInterval(window.pingInterval);
     }
 
-    peerConnection = new RTCPeerConnection(config);
+    peerConnection = new RTCPeerConnection({
+        iceServers: config.iceServers,
+        iceTransportPolicy: "all", // allow all
+        bundlePolicy: "max-bundle",
+        rtcpMuxPolicy: "require"
+    });
 
     let remoteDescSet = false;
     let iceQueue = [];
@@ -51,10 +69,17 @@ export function createConnection(socket, isSender, onConnected) {
             });
         });
     }
+    // 🔥 PRIORITIZE DIRECT (host/srflx)
+    peerConnection.addEventListener("icecandidate", (e) => {
+        if (e.candidate) {
+            console.log("[ICE]", e.candidate.candidate);
+        }
+    });
 
     function safeConnect() {
         if (!connected) {
             connected = true;
+            window.wasConnectedOnce = true;
             console.log("[RTC] ✅ CONNECTED");
 
             // 🔥 detect mode
@@ -79,33 +104,34 @@ export function createConnection(socket, isSender, onConnected) {
         console.log("[RTC] ICE:", state);
 
         if (state === "connected" || state === "completed") {
+
+            // 🔥 cancel disconnect timer (recovered)
+            if (window.disconnectTimer) {
+                clearTimeout(window.disconnectTimer);
+                window.disconnectTimer = null;
+            }
+
             safeConnect();
         }
 
         if (state === "disconnected") {
-            console.log("[RTC] temporary disconnect... trying to recover");
+            console.log("[RTC] disconnected");
 
-            if (window.isManualDisconnect || window.peerManuallyDisconnected) {
-                console.log("[RTC] skip reconnect (manual)");
-                return;
-            }
+            // 🔥 start grace timer (for mobile background / network drop)
+            if (window.disconnectTimer) clearTimeout(window.disconnectTimer);
 
-            setTimeout(() => {
-                if (peerConnection.iceConnectionState === "disconnected") {
-                    console.log("[RTC] still disconnected → reconnecting");
+            window.disconnectTimer = setTimeout(() => {
+                console.log("[RTC] disconnect timeout → treating as final");
 
-                    if (window.isManualDisconnect || window.peerManuallyDisconnected) {
-                        console.log("[RTC] reconnect blocked");
-                        return;
-                    }
-
-                    if (window.socket) {
-                        createConnection(window.socket, window.isSender, () => {
-                            router.navigate("connected");
-                        });
-                    }
+                if (window.handlePeerDisconnect) {
+                    window.handlePeerDisconnect();
                 }
-            }, 2000);
+            }, 4000); // ⏱️ 4 sec grace
+
+            // 🔥 show reconnect UI immediately
+            if (!window.isManualDisconnect && !window.peerManuallyDisconnected) {
+                router.navigate("reconnect");
+            }
         }
         if (state === "failed") {
             console.log("[RTC] connection failed");

@@ -69,12 +69,23 @@ window.handleDisconnect = function () {
 // ================= PEER DISCONNECT =================
 window.handlePeerDisconnect = function () {
 
-    // ❌ ignore manual cases
     if (window.isManualDisconnect || window.peerManuallyDisconnected) return;
 
-    console.log("[APP] network lost → reconnect");
+    // 🔥 if connection was stable before → treat as final disconnect
+    if (window.wasConnectedOnce) {
+        console.log("[APP] peer left → go home");
 
-    // ✅ show reconnect screen
+        cleanupConnection();
+
+        showPopup("Other user disconnected");
+
+        router.navigate("home");
+        return;
+    }
+
+    // 🔥 only for unstable / early drops
+    console.log("[APP] unstable connection → reconnect");
+
     router.navigate("reconnect");
 };
 window.cancelReconnect = function () {
