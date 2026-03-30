@@ -7,11 +7,9 @@ const config = {
     ]
 };
 
-// 🔥 ADD TURN ONLY IF NEEDED
+// 🔥 TURN fallback
 setTimeout(() => {
     if (!peerConnection || peerConnection.connectionState === "connected") return;
-
-    console.log("[RTC] enabling TURN fallback");
 
     peerConnection.setConfiguration({
         iceServers: [
@@ -34,7 +32,7 @@ export function createConnection(socket, isSender, onConnected) {
     window.receiverReady = false;
     window.fileAckReceived = false;
     window.peerManuallyDisconnected = false;
-    // 🔥 CLEAN PREVIOUS CONNECTION (important for reconnect)
+
     if (peerConnection) {
         try { peerConnection.close(); } catch {}
     }
@@ -45,7 +43,7 @@ export function createConnection(socket, isSender, onConnected) {
 
     peerConnection = new RTCPeerConnection({
         iceServers: config.iceServers,
-        iceTransportPolicy: "all", // allow all
+        iceTransportPolicy: "all",
         bundlePolicy: "max-bundle",
         rtcpMuxPolicy: "require"
     });
@@ -58,45 +56,31 @@ export function createConnection(socket, isSender, onConnected) {
         peerConnection.getStats().then(stats => {
             stats.forEach(report => {
                 if (report.type === "candidate-pair" && report.selected) {
-                    if (report.localCandidateType === "relay") {
-                        window.connectionMode = "relay"; // 🌐
-                        console.log("[MODE] RELAY (global)");
-                    } else {
-                        window.connectionMode = "direct"; // ⚡
-                        console.log("[MODE] DIRECT (p2p)");
-                    }
+                    window.connectionMode =
+                        report.localCandidateType === "relay" ? "relay" : "direct";
                 }
             });
         });
     }
-    // 🔥 PRIORITIZE DIRECT (host/srflx)
-    peerConnection.addEventListener("icecandidate", (e) => {
-        if (e.candidate) {
-            console.log("[ICE]", e.candidate.candidate);
-        }
-    });
 
     function safeConnect() {
-        window.receivedFiles = [];     // 🔥 reset old received files
-        window.lastSentFile = null;    // 🔥 reset sender state
-        window.fileQueue = [];         // 🔥 reset queue
-        if (!window.sentFiles) {
-            window.sentFiles = [];
-        }
+        // 🔥 CLEAN STATE (CRITICAL FIX)
+        window.receiverReady = false;
+        window.fileAckReceived = false;
+        window.lastSentFile = null;
+        window.fileQueue = [];
         window.__sendingStarted = false;
+
         if (!connected) {
             connected = true;
             window.wasConnectedOnce = true;
-            console.log("[RTC] ✅ CONNECTED");
 
-            // 🔥 detect mode
             detectConnectionType();
-
             onConnected && onConnected();
         }
     }
 
-    // ================= ICE =================
+    // ICE
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
             socket.send(JSON.stringify({
@@ -108,99 +92,61 @@ export function createConnection(socket, isSender, onConnected) {
 
     peerConnection.oniceconnectionstatechange = () => {
         const state = peerConnection.iceConnectionState;
-        console.log("[RTC] ICE:", state);
 
         if (state === "connected" || state === "completed") {
-
-            // 🔥 cancel disconnect timer (recovered)
             if (window.disconnectTimer) {
                 clearTimeout(window.disconnectTimer);
                 window.disconnectTimer = null;
             }
-
             safeConnect();
         }
 
         if (state === "disconnected") {
-            console.log("[RTC] disconnected");
-
-            // 🔥 start grace timer (for mobile background / network drop)
             if (window.disconnectTimer) clearTimeout(window.disconnectTimer);
 
             window.disconnectTimer = setTimeout(() => {
-                console.log("[RTC] disconnect timeout → treating as final");
-
                 if (window.handlePeerDisconnect) {
                     window.handlePeerDisconnect();
                 }
-            }, 4000); // ⏱️ 4 sec grace
+            }, 4000);
 
-            // 🔥 show reconnect UI immediately
             if (!window.isManualDisconnect && !window.peerManuallyDisconnected) {
                 router.navigate("reconnect");
             }
         }
-        if (state === "failed") {
-            console.log("[RTC] connection failed");
 
-            if (window.handlePeerDisconnect) {
-                window.handlePeerDisconnect();
-            }
+        if (state === "failed") {
+            window.handlePeerDisconnect?.();
         }
     };
 
-    // ================= DATA CHANNEL =================
+    // DATA CHANNEL
     function setupChannel(channel) {
         dataChannel = channel;
 
-        console.log("[RTC] 📡 DataChannel ready");
-
         dataChannel.onopen = () => {
-            console.log("[RTC] 🔥 DataChannel OPEN");
             safeConnect();
 
-            // 🔥 ensure receiverReady always reset correctly
-            if (!isSender) {
-                setTimeout(() => {
-                    console.log("[FILE] sending ready-to-receive");
-                    dataChannel.send(JSON.stringify({ type: "ready-to-receive" }));
-                }, 200); // slight delay for stability
-            }
-
-            // 🔥 KEEP ALIVE
             window.pingInterval = setInterval(() => {
-                if (dataChannel && dataChannel.readyState === "open") {
+                if (dataChannel?.readyState === "open") {
                     dataChannel.send(JSON.stringify({ type: "ping" }));
-                    console.log("[PING] sent");
                 }
             }, 3000);
         };
 
         dataChannel.onmessage = (event) => {
-            if (window.handleIncomingData) {
-                window.handleIncomingData(event.data);
-            }
+            window.handleIncomingData?.(event.data);
         };
 
         dataChannel.onclose = () => {
-            console.log("[RTC] DataChannel closed");
+            if (window.pingInterval) clearInterval(window.pingInterval);
 
-            if (window.pingInterval) {
-                clearInterval(window.pingInterval);
-            }
+            if (window.isManualDisconnect) return;
 
-            if (window.isManualDisconnect) {
-                console.log("[RTC] ignore close (manual)");
-                return;
-            }
-
-            if (window.handlePeerDisconnect) {
-                window.handlePeerDisconnect();
-            }
+            window.handlePeerDisconnect?.();
         };
     }
 
-    // ================= CHANNEL INIT =================
     if (isSender) {
         setupChannel(peerConnection.createDataChannel("file"));
     } else {
@@ -209,10 +155,11 @@ export function createConnection(socket, isSender, onConnected) {
         };
     }
 
-    // ================= SIGNALING =================
     socket.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);
-        console.log("[WS]", data);
+        if (data.type === "force-disconnect") {
+            window.handlePeerDisconnect?.();
+        }
 
         if (data.type === "offer") {
             await peerConnection.setRemoteDescription(data.offer);
@@ -251,20 +198,22 @@ export function createConnection(socket, isSender, onConnected) {
         }
 
         if (data.type === "join" && isSender) {
-            startOffer(socket);
-        }
-        if (data.type === "peer-disconnected") {
-            console.log("[WS] peer disconnected");
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
 
-            if (window.handlePeerDisconnect) {
-                window.handlePeerDisconnect();
-            }
+            socket.send(JSON.stringify({
+                type: "offer",
+                offer
+            }));
+        }
+
+        if (data.type === "peer-disconnected") {
+            window.handlePeerDisconnect?.();
         }
     };
 }
-export function cleanupConnection() {
-    console.log("[RTC] cleanup");
 
+export function cleanupConnection() {
     try { peerConnection?.close(); } catch {}
     try { dataChannel?.close(); } catch {}
 
@@ -272,17 +221,9 @@ export function cleanupConnection() {
         clearInterval(window.pingInterval);
         window.pingInterval = null;
     }
+
     window.receiverReady = false;
+
     try { window.socket?.close(); } catch {}
     window.socket = null;
-}
-// ================= OFFER =================
-async function startOffer(socket) {
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-
-    socket.send(JSON.stringify({
-        type: "offer",
-        offer
-    }));
 }

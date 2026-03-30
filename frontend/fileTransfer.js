@@ -1,28 +1,82 @@
 import { dataChannel } from "./webrtc.js";
 
+// ================= STATE =================
 let incomingFile = null;
 let receivedSize = 0;
-let startTime = 0;
+let fileBuffer = [];
 
-let currentSendProgress = 0;
-let currentFileSize = 0;
-let currentFileStartTime = 0;
 let currentFileId = null;
+let currentFileSize = 0;
 
-// 🔥 CONTROLLED BUFFER (NO MEMORY SPIKE)
-let chunkStore = [];
-let flushSize = 0;
-const MAX_BUFFER = 5 * 1024 * 1024; // 5MB safe for phones
-
-// 🔥 FINAL FILE
-let finalChunks = [];
-
-window.isTabHidden = false;
 window.receiverReady = false;
+window.fileAckReceived = false;
+window.fileQueue = [];
+window.sentFiles = [];
 
-document.addEventListener("visibilitychange", () => {
-    window.isTabHidden = document.hidden;
-});
+// ================= PROGRESS ENGINE =================
+const targetProgress = {};
+const displayedProgress = {};
+let animationRunning = false;
+
+function startProgressEngine() {
+    if (animationRunning) return;
+    animationRunning = true;
+
+    function loop() {
+        for (const id in targetProgress) {
+            if (displayedProgress[id] === undefined) {
+                displayedProgress[id] = 0;
+            }
+
+            let current = displayedProgress[id];
+            const target = targetProgress[id];
+
+            current += (target - current) * 0.25;
+
+            if (Math.abs(target - current) < 0.3) {
+                current = target;
+            }
+
+            displayedProgress[id] = current;
+
+            const percent = Math.floor(current);
+
+            const bar = document.getElementById(`bar-${id}`);
+            const p = document.getElementById(`percent-${id}`);
+
+            if (bar) bar.style.width = percent + "%";
+            if (p) p.innerText = percent + "%";
+        }
+
+        requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+}
+
+// ================= UI =================
+function createFileUI(id, name, type) {
+    const list = document.getElementById("transfer-list");
+    if (!list) return;
+
+    const color = type === "send" ? "bg-primary" : "bg-green-500";
+    const label = type === "send" ? "Sending..." : "Receiving...";
+
+    list.innerHTML += `
+<div id="file-${id}" class="p-4 glass-card space-y-2 text-left">
+    <p class="font-bold text-sm truncate">${name}</p>
+
+    <div class="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+        <div id="bar-${id}" class="h-full ${color}" style="width:0%"></div>
+    </div>
+
+    <div class="flex justify-between text-xs font-mono opacity-70">
+        <span id="percent-${id}">0%</span>
+        <span>${label}</span>
+        <span>--</span>
+    </div>
+</div>`;
+}
 
 // ================= RECEIVER =================
 window.handleIncomingData = async function (data) {
@@ -30,54 +84,52 @@ window.handleIncomingData = async function (data) {
     if (typeof data === "string") {
         const msg = JSON.parse(data);
 
-        if (msg.type === "ping") return;
-
-        // ================= FILE META =================
+        // META
         if (msg.type === "file-meta") {
+
             incomingFile = msg;
-            incomingFile.id = msg.id;
-            // 🔥 create UI card (receiver)
-            const list = document.getElementById("transfer-list");
-            if (list) {
-                list.innerHTML += `
-                    <div id="file-${msg.id}" class="p-4 glass-card space-y-2 text-left">
-                        <p class="font-bold text-sm truncate">${msg.name}</p>
-
-                        <div class="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-                            <div id="bar-${msg.id}" class="h-full bg-green-500" style="width:0%"></div>
-                        </div>
-
-                        <div class="flex justify-between text-xs font-mono opacity-70">
-                            <span id="percent-${msg.id}">0%</span>
-                            <span id="speed-${msg.id}">0 MB/s</span>
-                            <span id="eta-${msg.id}">--</span>
-                        </div>
-                    </div>
-                `;
-            }
             receivedSize = 0;
-            startTime = Date.now();
+            fileBuffer = [];
+            window.incomingFile = msg;
 
-            chunkStore = [];
-            finalChunks = [];
-            flushSize = 0;
+            targetProgress[msg.id] = 0;
+            displayedProgress[msg.id] = 0;
+            startProgressEngine();
 
-            window.lastProgressSent = 0;
-
+            // 🔥 go to receiving screen
             router.navigate("receiving");
+
+            // notify sender ready
+            setTimeout(() => {
+                if (dataChannel?.readyState === "open") {
+                    dataChannel.send(JSON.stringify({ type: "ready" }));
+                }
+            }, 50);
         }
 
-        // ================= FILE END =================
-        if (msg.type === "file-end") {
-            console.log("[FILE] complete");
+        // READY
+        else if (msg.type === "ready") {
+            window.receiverReady = true;
+        }
 
-            // 🔥 flush remaining
-            if (chunkStore.length) {
-                finalChunks.push(new Blob(chunkStore));
-                chunkStore = [];
+        // PROGRESS (sender side)
+        else if (msg.type === "progress" && window.isSender) {
+            if (!currentFileSize) return;
+
+            const percent = Math.floor((msg.received / currentFileSize) * 100);
+
+            if (!targetProgress[msg.id]) {
+                targetProgress[msg.id] = 0;
+                displayedProgress[msg.id] = 0;
             }
 
-            const blob = new Blob(finalChunks);
+            targetProgress[msg.id] = percent;
+        }
+
+        // END (receiver)
+        else if (msg.type === "file-end") {
+
+            const blob = new Blob(fileBuffer);
 
             if (!window.receivedFiles) window.receivedFiles = [];
             window.receivedFiles.push({
@@ -86,107 +138,53 @@ window.handleIncomingData = async function (data) {
                 blob
             });
 
+            targetProgress[incomingFile.id] = 100;
+
             if (dataChannel?.readyState === "open") {
-                dataChannel.send(JSON.stringify({ type: "file-received" }));
+                dataChannel.send(JSON.stringify({ type: "ack" }));
             }
 
-            const bar = document.querySelector(".progress-bar-fill");
-            if (bar) bar.style.width = "100%";
-
-            router.navigate("completed");
+            // 🔥 go completed (receiver)
+            setTimeout(() => {
+                router.navigate("completed");
+            }, 1200);
         }
 
-        if (msg.type === "ready-to-receive") {
-            window.receiverReady = true;
-        }
-
-        if (msg.type === "file-received") {
+        // ACK (sender)
+        else if (msg.type === "ack") {
             window.fileAckReceived = true;
-        }
 
-        if (msg.type === "progress") {
-
-            // 🔥 ONLY sender updates UI
-            if (window.isSender) {
-
-                const id = msg.id;
-                const received = msg.received;
-
-                const total = currentFileSize;
-
-                const percent = Math.floor((received / total) * 100);
-
-                const elapsed = (Date.now() - currentFileStartTime) / 1000;
-                const speed = (received / 1024 / 1024) / elapsed;
-
-                const remaining = total - received;
-                const eta = speed > 0 ? (remaining / 1024 / 1024 / speed) : 0;
-
-                const bar = document.getElementById(`bar-send-${id}`);
-                const p = document.getElementById(`percent-send-${id}`);
-                const s = document.getElementById(`speed-send-${id}`);
-                const e = document.getElementById(`eta-send-${id}`);
-
-                if (bar) bar.style.width = percent + "%";
-                if (p) p.innerText = percent + "%";
-                if (s) s.innerText = speed.toFixed(2) + " MB/s";
-                if (e) e.innerText = eta.toFixed(1) + "s";
+            if (window.lastSentFile) {
+                window.sentFiles.push({
+                    name: window.lastSentFile.name,
+                    size: window.lastSentFile.size
+                });
             }
 
-            return;
+            // 🔥 go completed (sender)
+            setTimeout(() => {
+                router.navigate("completed");
+            }, 1200);
         }
 
-        if (msg.type === "disconnect") {
-            window.peerManuallyDisconnected = true;
-            window.cleanupConnection?.();
-            showPopup("Other user disconnected");
-            router.navigate("home");
-            return;
+        // DISCONNECT
+        else if (msg.type === "disconnect") {
+            window.handlePeerDisconnect();
         }
 
     } else {
-        // ================= RECEIVING CHUNK =================
-
-        chunkStore.push(data);
-        flushSize += data.byteLength;
+        // CHUNKS (receiver)
+        fileBuffer.push(data);
         receivedSize += data.byteLength;
 
-        // 🔥 FLUSH EVERY 5MB (KEY FIX)
-        if (flushSize >= MAX_BUFFER) {
-            finalChunks.push(new Blob(chunkStore));
-            chunkStore = [];
-            flushSize = 0;
-        }
+        const percent = Math.floor((receivedSize / incomingFile.size) * 100);
+        targetProgress[incomingFile.id] = percent;
 
-        // 🔥 PROGRESS
-        if (incomingFile) {
-            const id = incomingFile.id;
-
-            const percent = Math.floor((receivedSize / incomingFile.size) * 100);
-
-            const elapsed = (Date.now() - startTime) / 1000;
-            const speed = (receivedSize / 1024 / 1024) / elapsed;
-
-            const remaining = incomingFile.size - receivedSize;
-            const eta = speed > 0 ? (remaining / 1024 / 1024 / speed) : 0;
-
-            const bar = document.getElementById(`bar-${id}`);
-            const p = document.getElementById(`percent-${id}`);
-            const s = document.getElementById(`speed-${id}`);
-            const e = document.getElementById(`eta-${id}`);
-
-            if (bar) bar.style.width = percent + "%";
-            if (p) p.innerText = percent + "%";
-            if (s) s.innerText = speed.toFixed(2) + " MB/s";
-            if (e) e.innerText = eta.toFixed(1) + "s";
-        }
-
-        // 🔥 SEND PROGRESS
+        // throttle progress send
         if (!window.lastProgressSent) window.lastProgressSent = 0;
 
-        const now = Date.now();
-        if (now - window.lastProgressSent > 120) {
-            window.lastProgressSent = now;
+        if (Date.now() - window.lastProgressSent > 100) {
+            window.lastProgressSent = Date.now();
 
             if (dataChannel?.readyState === "open") {
                 dataChannel.send(JSON.stringify({
@@ -200,123 +198,121 @@ window.handleIncomingData = async function (data) {
 };
 
 // ================= FILE SELECT =================
-window.handleFileSelect = async function (event) {
+window.handleFileSelect = function (event) {
     const files = Array.from(event.target.files);
     if (!files.length) return;
 
-    if (!window.fileQueue) window.fileQueue = [];
+    // 🔥 ONLY ONE FILE AT A TIME
+    window.fileQueue = [files[0]];
 
-    window.fileQueue.push(...files);
-
-    // 🔥 show selected files
-    const container = document.getElementById("selected-files");
-    if (container) {
-        container.innerHTML = files.map(f => `
-            <div class="p-3 glass-card text-left text-sm">
-                ${f.name}
-            </div>
-        `).join("");
+    if (!window.__sendingStarted) {
+        window.__sendingStarted = true;
+        waitForChannel();
     }
-
-    router.navigate("sending");
 };
 
-// ================= SENDER =================
-export async function sendSelectedFile() {
+async function waitForChannel() {
+    let wait = 0;
 
-    if (!window.fileQueue || window.fileQueue.length === 0) return;
-
-    while (window.fileQueue.length > 0) {
-
-        const file = window.fileQueue.shift();
-
-        if (!window.sentFiles) window.sentFiles = [];
-
-        const fileId = Date.now() + "_" + file.name;
-        currentFileId = fileId;
-
-        window.sentFiles.push({
-            name: file.name,
-            size: file.size
-        });
-
-        const sentBox = document.getElementById("transfer-list");
-
-        if (sentBox) {
-            sentBox.innerHTML += `
-                <div id="send-file-${fileId}" class="p-4 glass-card space-y-2 text-left">
-                    <p class="font-bold text-sm truncate">${file.name}</p>
-
-                    <div class="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-                        <div id="bar-send-${fileId}" class="h-full bg-primary" style="width:0%"></div>
-                    </div>
-
-                    <div class="flex justify-between text-xs font-mono opacity-70">
-                        <span id="percent-send-${fileId}">0%</span>
-                        <span id="speed-send-${fileId}">0 MB/s</span>
-                        <span id="eta-send-${fileId}">--</span>
-                    </div>
-                </div>
-            `;
-        }
-        window.lastSentFile = file;
-
-        while (!window.receiverReady) {
-            await new Promise(r => setTimeout(r, 100));
-        }
-
-        while (dataChannel.readyState !== "open") {
-            await new Promise(r => setTimeout(r, 50));
-        }
-
-        startTime = Date.now();
-        currentFileSize = file.size;
-        currentFileStartTime = Date.now();
-
-        dataChannel.send(JSON.stringify({
-            type: "file-meta",
-            id: currentFileId,
-            name: file.name,
-            size: file.size
-        }));
-
-        const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-        const chunkSize = isMobile ? 32 * 1024 : 128 * 1024;
-
-        let offset = 0;
-
-        while (offset < file.size) {
-
-            while (window.isTabHidden) {
-                await new Promise(r => setTimeout(r, 200));
-            }
-
-            if (dataChannel.bufferedAmount > 8 * 1024 * 1024) {
-                await new Promise(r => setTimeout(r, 1));
-                continue;
-            }
-
-            const chunk = file.slice(offset, offset + chunkSize);
-            const buffer = await chunk.arrayBuffer();
-
-            dataChannel.send(buffer);
-            offset += chunkSize;
-        }
-
-        dataChannel.send(JSON.stringify({ type: "file-end" }));
-        const bar = document.getElementById(`bar-send-${currentFileId}`);
-        const p = document.getElementById(`percent-send-${currentFileId}`);
-        const e = document.getElementById(`eta-send-${currentFileId}`);
-
-        if (bar) bar.style.width = "100%";
-        if (p) p.innerText = "100%";
-        if (e) e.innerText = "Done";
-
-        window.fileAckReceived = false;
-        while (!window.fileAckReceived) {
-            await new Promise(r => setTimeout(r, 50));
-        }
+    while (
+        (!dataChannel || dataChannel.readyState !== "open") &&
+        wait < 10000
+    ) {
+        await new Promise(r => setTimeout(r, 100));
+        wait += 100;
     }
 
-    router.navigate("completed");
+    if (!dataChannel || dataChannel.readyState !== "open") {
+        console.error("[SEND] channel failed");
+        return;
+    }
+
+    processQueue();
+}
+
+// ================= QUEUE =================
+async function processQueue() {
+    while (window.fileQueue.length > 0) {
+        const file = window.fileQueue.shift();
+        await sendFile(file);
+    }
+
+    window.__sendingStarted = false;
+}
+
+// ================= SENDER =================
+async function sendFile(file) {
+
+    const fileId = Date.now() + "_" + file.name;
+
+    currentFileId = fileId;
+    currentFileSize = file.size;
+
+    window.lastSentFile = file;
+    window.receiverReady = false;
+    window.fileAckReceived = false;
+
+    targetProgress[fileId] = 0;
+    displayedProgress[fileId] = 0;
+    startProgressEngine();
+
+    await waitForTransferList();
+        window.incomingFile = {
+        id: fileId,
+        name: file.name
+    };
+
+    router.navigate("sending");
+
+    dataChannel.send(JSON.stringify({
+        type: "file-meta",
+        id: fileId,
+        name: file.name,
+        size: file.size
+    }));
+
+    // WAIT READY
+    let wait = 0;
+    while (!window.receiverReady && wait < 10000) {
+        await new Promise(r => setTimeout(r, 50));
+        wait += 50;
+    }
+
+    // SEND CHUNKS (FAST + SAFE)
+    let offset = 0;
+    const chunkSize = 64 * 1024;
+
+    while (offset < file.size) {
+
+        // 🔥 buffer control (important mobile)
+        if (dataChannel.bufferedAmount > 512 * 1024) {
+            await new Promise(r => setTimeout(r, 2));
+            continue;
+        }
+
+        const chunk = file.slice(offset, offset + chunkSize);
+        const buffer = await chunk.arrayBuffer();
+
+        dataChannel.send(buffer);
+        offset += chunkSize;
+    }
+
+    dataChannel.send(JSON.stringify({ type: "file-end" }));
+
+    // WAIT ACK
+    let ackWait = 0;
+    while (!window.fileAckReceived && ackWait < 10000) {
+        await new Promise(r => setTimeout(r, 50));
+        ackWait += 50;
+    }
+}
+
+export { processQueue };
+async function waitForTransferList() {
+    let tries = 0;
+
+    while (!document.getElementById("transfer-list") && tries < 60) {
+        await new Promise(r => setTimeout(r, 30));
+        tries++;
+    }
 }

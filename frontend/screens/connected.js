@@ -1,3 +1,7 @@
+setTimeout(() => {
+    const list = document.getElementById("transfer-list");
+    if (list) list.innerHTML = "";
+}, 0);
 export const Connected = () => {
     const isSender = window.isSender;
 
@@ -39,8 +43,7 @@ export const Connected = () => {
                     <p class="text-sm opacity-60 mt-2">Multiple supported</p>
                 </div>
 
-                <div id="selected-files" class="w-full space-y-2"></div>
-
+                <!-- 🔥 TRANSFER LIST (SENDER + RECEIVER SAME UI) -->
                 <div class="w-full space-y-2">
                     <p class="text-sm opacity-60 text-left">Transfers</p>
                     <div id="transfer-list" class="space-y-3"></div>

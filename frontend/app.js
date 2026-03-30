@@ -1,4 +1,3 @@
-// frontend/app.js
 import { router } from './router.js';
 import './fileTransfer.js';
 import { cleanupConnection, dataChannel } from './webrtc.js';
@@ -31,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     themeToggle.addEventListener('click', toggleTheme);
 
-    // 🔥 route based on QR
     const params = new URLSearchParams(window.location.search);
     const screen = params.get("screen");
 
@@ -42,72 +40,64 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ================= GLOBALS =================
+// ================= GLOBAL =================
 window.cleanupConnection = cleanupConnection;
 window.isManualDisconnect = false;
 
 // ================= MANUAL DISCONNECT =================
 window.handleDisconnect = function () {
-    console.log("[RTC] manual disconnect");
-
     window.isManualDisconnect = true;
-    window.peerManuallyDisconnected = true;
 
     try {
         if (dataChannel?.readyState === "open") {
             dataChannel.send(JSON.stringify({ type: "disconnect" }));
         }
     } catch {}
-    window.__sendingStarted = false;
+
+    try {
+        if (window.socket && window.socket.readyState === 1) {
+            window.socket.send(JSON.stringify({ type: "peer-disconnected" }));
+        }
+    } catch {}
+
     cleanupConnection();
 
-    showPopup("You disconnected");
-
+    window.disconnectMessage = "You disconnected";
     router.navigate("home");
 };
-
 // ================= PEER DISCONNECT =================
 window.handlePeerDisconnect = function () {
 
     if (window.isManualDisconnect || window.peerManuallyDisconnected) return;
 
-    // 🔥 if connection was stable before → treat as final disconnect
     if (window.wasConnectedOnce) {
-        console.log("[APP] peer left → go home");
-        window.__sendingStarted = false;
         cleanupConnection();
 
-        showPopup("Other user disconnected");
+        window.disconnectMessage = "Other user disconnected";
+
         window.receivedFiles = [];
-        window.lastSentFile = null;
         window.fileQueue = [];
+        window.lastSentFile = null;
 
         router.navigate("home");
         return;
     }
 
-    // 🔥 only for unstable / early drops
-    console.log("[APP] unstable connection → reconnect");
-
     router.navigate("reconnect");
 };
+
+// ================= RECONNECT CANCEL =================
 window.cancelReconnect = function () {
-    console.log("[RTC] reconnect cancelled");
-
     window.isManualDisconnect = true;
-
     cleanupConnection();
-
     router.navigate("home");
 };
-window.showPopup = function (message) {
-    const div = document.createElement("div");
-    div.className = "fixed top-20 left-1/2 -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-xl z-50 shadow-lg text-sm";
-    div.innerText = message;
 
-    document.body.appendChild(div);
-
-    setTimeout(() => {
-        div.remove();
-    }, 3000);
-};
+// 🔥 TAB CLOSE DETECTION
+window.addEventListener("beforeunload", () => {
+    try {
+        if (window.dataChannel?.readyState === "open") {
+            window.dataChannel.send(JSON.stringify({ type: "disconnect" }));
+        }
+    } catch {}
+});
