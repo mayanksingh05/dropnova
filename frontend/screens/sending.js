@@ -27,7 +27,10 @@ export const Sending = () => {
         sendSelectedFile();
     }
 
-    waitAndSend();
+    if (!window.__sendingStarted) {
+        window.__sendingStarted = true;
+        waitAndSend();
+    }
 
     return `
     <div class="w-full space-y-8">

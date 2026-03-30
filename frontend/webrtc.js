@@ -80,7 +80,10 @@ export function createConnection(socket, isSender, onConnected) {
         window.receivedFiles = [];     // 🔥 reset old received files
         window.lastSentFile = null;    // 🔥 reset sender state
         window.fileQueue = [];         // 🔥 reset queue
-        window.sentFiles = [];
+        if (!window.sentFiles) {
+            window.sentFiles = [];
+        }
+        window.__sendingStarted = false;
         if (!connected) {
             connected = true;
             window.wasConnectedOnce = true;

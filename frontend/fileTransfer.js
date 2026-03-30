@@ -235,7 +235,10 @@ export async function sendSelectedFile() {
         const fileId = Date.now() + "_" + file.name;
         currentFileId = fileId;
 
-        window.sentFiles.push(file);
+        window.sentFiles.push({
+            name: file.name,
+            size: file.size
+        });
 
         const sentBox = document.getElementById("transfer-list");
 

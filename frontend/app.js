@@ -58,7 +58,7 @@ window.handleDisconnect = function () {
             dataChannel.send(JSON.stringify({ type: "disconnect" }));
         }
     } catch {}
-
+    window.__sendingStarted = false;
     cleanupConnection();
 
     showPopup("You disconnected");
@@ -74,7 +74,7 @@ window.handlePeerDisconnect = function () {
     // 🔥 if connection was stable before → treat as final disconnect
     if (window.wasConnectedOnce) {
         console.log("[APP] peer left → go home");
-
+        window.__sendingStarted = false;
         cleanupConnection();
 
         showPopup("Other user disconnected");
