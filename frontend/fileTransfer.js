@@ -147,11 +147,12 @@ window.handleIncomingData = async function (data) {
         }
 
     } else {
-        // ===== CHUNKS =====
+        // ================= CHUNKS (RECEIVER) =================
 
         fileBuffer.push(data);
         receivedSize += data.byteLength;
 
+        // ===== NEW STABLE SPEED SYSTEM =====
         if (!window.__speedSamples) window.__speedSamples = [];
 
         const now = Date.now();
@@ -161,6 +162,7 @@ window.handleIncomingData = async function (data) {
             bytes: receivedSize
         });
 
+        // keep last 2 seconds only
         window.__speedSamples = window.__speedSamples.filter(s => now - s.time <= 2000);
 
         if (window.__speedSamples.length >= 2) {
@@ -170,15 +172,31 @@ window.handleIncomingData = async function (data) {
             const timeDiff = (last.time - first.time) / 1000;
             const byteDiff = last.bytes - first.bytes;
 
-            if (timeDiff > 0) {
-                const speed = byteDiff / timeDiff;
-                window.currentSpeed = (speed / (1024 * 1024)).toFixed(2);
+            // 🔥 FIX 1: avoid unstable tiny windows
+            if (timeDiff > 0.2) {
+
+                const newSpeed = byteDiff / timeDiff;
+                const newMB = (newSpeed / (1024 * 1024));
+
+                // 🔥 FIX 2: smooth speed (no spikes / no 0)
+                if (!window.currentSpeed || window.currentSpeed === "0") {
+                    window.currentSpeed = newMB.toFixed(2);
+                } else {
+                    const smooth = (parseFloat(window.currentSpeed) * 0.7) + (newMB * 0.3);
+                    window.currentSpeed = smooth.toFixed(2);
+                }
             }
+        }
+
+        // 🔥 FIX 3: prevent 0 display when data flowing
+        if (window.currentSpeed === "0" && receivedSize > 0) {
+            window.currentSpeed = "0.1";
         }
 
         const percent = Math.floor((receivedSize / incomingFile.size) * 100);
         targetProgress[incomingFile.id] = percent;
 
+        // send progress + speed
         if (!window.lastProgressSent) window.lastProgressSent = 0;
 
         if (Date.now() - window.lastProgressSent > 100) {
