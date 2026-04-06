@@ -7,7 +7,7 @@ function generateCode() {
 export const Send = () => {
     const code = generateCode();
 
-    const socket = new WebSocket(`ws://${location.hostname}:8000/ws/${code}`);
+    const socket = new WebSocket(`wss://dropnova.onrender.com/ws/${code}`);
 
     socket.onopen = () => {
         console.log("Sender connected");
