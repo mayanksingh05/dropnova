@@ -17,6 +17,8 @@ window.fileQueue = [];
 window.sentFiles = [];
 window.currentSpeed = "0";
 
+window.__cancelTransfer = false; // 🔥 NEW
+
 // ================= PROGRESS ENGINE =================
 const targetProgress = {};
 const displayedProgress = {};
@@ -64,16 +66,13 @@ window.handleIncomingData = async function (data) {
     if (typeof data === "string") {
         const msg = JSON.parse(data);
 
-        // META
         if (msg.type === "file-meta") {
 
             incomingFile = msg;
             receivedSize = 0;
             fileBuffer = [];
-            window.currentSpeed = "0.01";
+            window.currentSpeed = "0";
             window.__speedSamples = [];
-            lastTime = 0;
-            lastBytes = 0;
 
             window.incomingFile = msg;
 
@@ -90,12 +89,10 @@ window.handleIncomingData = async function (data) {
             }, 50);
         }
 
-        // READY
         else if (msg.type === "ready") {
             window.receiverReady = true;
         }
 
-        // PROGRESS (SENDER SIDE UPDATE)
         else if (msg.type === "progress" && window.isSender) {
 
             if (!currentFileSize) return;
@@ -108,12 +105,9 @@ window.handleIncomingData = async function (data) {
             }
 
             targetProgress[msg.id] = percent;
-
-            // 🔥 FIX: receive speed from receiver
             window.currentSpeed = msg.speed || "0";
         }
 
-        // END (receiver)
         else if (msg.type === "file-end") {
 
             const blob = new Blob(fileBuffer);
@@ -136,7 +130,6 @@ window.handleIncomingData = async function (data) {
             }, 1200);
         }
 
-        // ACK (sender)
         else if (msg.type === "ack") {
 
             window.fileAckReceived = true;
@@ -147,30 +140,18 @@ window.handleIncomingData = async function (data) {
                     size: window.lastSentFile.size
                 });
             }
-
-            setTimeout(() => {
-                router.navigate("completed");
-            }, 1200);
         }
 
-        // DISCONNECT
         else if (msg.type === "disconnect") {
             window.handlePeerDisconnect();
         }
 
     } else {
-        // ================= CHUNKS (RECEIVER) =================
+        // ===== CHUNKS =====
 
         fileBuffer.push(data);
         receivedSize += data.byteLength;
 
-        // 🔥 FORCE FIRST SPEED DISPLAY (fix phone → laptop)
-        if (window.currentSpeed === "0") {
-            const instantSpeed = data.byteLength / 0.2; // assume ~200ms
-            window.currentSpeed = (instantSpeed / (1024 * 1024)).toFixed(2);
-        }
-
-        // ===== NEW STABLE SPEED SYSTEM =====
         if (!window.__speedSamples) window.__speedSamples = [];
 
         const now = Date.now();
@@ -180,7 +161,6 @@ window.handleIncomingData = async function (data) {
             bytes: receivedSize
         });
 
-        // keep last 2 seconds only
         window.__speedSamples = window.__speedSamples.filter(s => now - s.time <= 2000);
 
         if (window.__speedSamples.length >= 2) {
@@ -199,7 +179,6 @@ window.handleIncomingData = async function (data) {
         const percent = Math.floor((receivedSize / incomingFile.size) * 100);
         targetProgress[incomingFile.id] = percent;
 
-        // send progress + speed
         if (!window.lastProgressSent) window.lastProgressSent = 0;
 
         if (Date.now() - window.lastProgressSent > 100) {
@@ -222,42 +201,46 @@ window.handleFileSelect = function (event) {
     const files = Array.from(event.target.files);
     if (!files.length) return;
 
-    window.fileQueue = [files[0]];
+    window.fileQueue.push(...files); // 🔥 MULTI FILE
 
     if (!window.__sendingStarted) {
         window.__sendingStarted = true;
+        window.__cancelTransfer = false;
         waitForChannel();
     }
 };
 
-async function waitForChannel() {
-    let wait = 0;
-
-    while ((!dataChannel || dataChannel.readyState !== "open") && wait < 10000) {
-        await new Promise(r => setTimeout(r, 100));
-        wait += 100;
-    }
-
-    if (!dataChannel || dataChannel.readyState !== "open") {
-        console.error("[SEND] channel failed");
-        return;
-    }
-
-    processQueue();
-}
-
 // ================= QUEUE =================
 async function processQueue() {
     while (window.fileQueue.length > 0) {
+
+        if (window.__cancelTransfer) break;
+
         const file = window.fileQueue.shift();
         await sendFile(file);
     }
 
     window.__sendingStarted = false;
+
+    if (!window.__cancelTransfer) {
+        router.navigate("completed");
+    }
 }
+
+// ================= CANCEL =================
+window.cancelTransfer = function () {
+    window.__cancelTransfer = true;
+    window.fileQueue = [];
+    window.receiverReady = false;
+    window.fileAckReceived = false;
+
+    router.navigate("connected"); // 🔥 stay connected
+};
 
 // ================= SENDER =================
 async function sendFile(file) {
+
+    if (window.__cancelTransfer) return;
 
     const fileId = Date.now() + "_" + file.name;
 
@@ -288,17 +271,18 @@ async function sendFile(file) {
 
     let wait = 0;
     while (!window.receiverReady && wait < 10000) {
+        if (window.__cancelTransfer) return;
         await new Promise(r => setTimeout(r, 50));
         wait += 50;
     }
 
     let offset = 0;
     const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-
-    // 🔥 adaptive chunk size
     const chunkSize = isMobile ? 16 * 1024 : 64 * 1024;
 
     while (offset < file.size) {
+
+        if (window.__cancelTransfer) return;
 
         const limit = isMobile ? 256 * 1024 : 512 * 1024;
 
@@ -318,9 +302,26 @@ async function sendFile(file) {
 
     let ackWait = 0;
     while (!window.fileAckReceived && ackWait < 10000) {
+        if (window.__cancelTransfer) return;
         await new Promise(r => setTimeout(r, 50));
         ackWait += 50;
     }
+}
+
+async function waitForChannel() {
+    let wait = 0;
+
+    while ((!dataChannel || dataChannel.readyState !== "open") && wait < 10000) {
+        await new Promise(r => setTimeout(r, 100));
+        wait += 100;
+    }
+
+    if (!dataChannel || dataChannel.readyState !== "open") {
+        console.error("[SEND] channel failed");
+        return;
+    }
+
+    processQueue();
 }
 
 export { processQueue };

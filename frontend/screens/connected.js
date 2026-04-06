@@ -33,7 +33,7 @@ export const Connected = () => {
                 rounded-3xl cursor-pointer hover:border-primary transition-all duration-300"
                 onclick="document.getElementById('file-input').click()">
 
-                    <input type="file" id="file-input" class="hidden"
+                    <input type="file" id="file-input" multiple class="hidden"
                     onchange="handleFileSelect(event)">
 
                     <div class="text-4xl mb-3">📄</div>
