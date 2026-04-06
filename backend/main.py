@@ -4,12 +4,17 @@ app = FastAPI()
 
 rooms = {}
 
+@app.get("/")
+def root():
+    return {"status": "alive"}
+
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
 
     if room_id not in rooms:
         rooms[room_id] = []
+
     # ❌ LIMIT TO 2 USERS
     if len(rooms[room_id]) >= 2:
         await websocket.close()
@@ -31,7 +36,8 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                     await connection.send_text(data)
 
     except WebSocketDisconnect:
-        rooms[room_id].remove(websocket)
+        if room_id in rooms and websocket in rooms[room_id]:
+            rooms[room_id].remove(websocket)
 
         # 🔥 notify remaining peer
         for conn in rooms.get(room_id, []):
@@ -39,3 +45,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                 await conn.send_text('{"type":"peer-disconnected"}')
             except:
                 pass
+
+        # ✅ SAFE CLEANUP (NEW)
+        if room_id in rooms and len(rooms[room_id]) == 0:
+            del rooms[room_id]
