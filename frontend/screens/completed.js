@@ -39,14 +39,22 @@ export const Completed = () => {
     // 🔥 SENDER FILE UI
     const sentFiles = window.sentFiles || [];
 
-    const senderBox = sentFiles.map(file => `
-        <div class="p-4 glass-card flex items-center justify-between gap-4">
-            <div class="text-left min-w-0">
-                <p class="font-bold truncate">${file.name}</p>
-                <p class="text-xs opacity-50">${formatSize(file.size)} • Sent Successfully</p>
+    const senderBox = `
+    <div class="w-full space-y-2">
+        ${sentFiles.map(file => `
+            <div class="p-4 glass-card flex items-center justify-between gap-4">
+
+                <div class="text-left min-w-0">
+                    <p class="font-bold truncate">${file.name}</p>
+                    <p class="text-xs opacity-50">
+                        ${formatSize(file.size)} • Sent Successfully
+                    </p>
+                </div>
+
             </div>
-        </div>
-    `).join("");
+        `).join("")}
+    </div>
+    `;
 
     return `
     <div class="w-full text-center space-y-8">

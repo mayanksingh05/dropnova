@@ -22,24 +22,21 @@ export const router = {
     
     navigate(screenName, props = {}) {
 
-        // ✅ ONLY track screen (no logic here)
         window.currentScreen = screenName;
-        
-        setTimeout(() => {
-            const screenFn = this.screens[screenName];
 
-            const root = document.getElementById("app-root");
-            if (!root) {
-                console.error("[Router] root element not found");
-                return;
-            }
+        const root = document.getElementById("app-root");
+        if (!root) {
+            console.error("[Router] root element not found");
+            return;
+        }
 
-            if (screenFn) {
-                root.innerHTML = screenFn(props);
-            }
+        const screenFn = this.screens[screenName];
 
-            root.style.opacity = '1';
-            root.className = "pt-24 pb-12 px-4 max-w-md mx-auto min-h-screen flex flex-col items-center justify-center screen-fade-in";
-        }, 200);
+        if (screenFn) {
+            root.innerHTML = screenFn(props);
+        }
+
+        root.style.opacity = '1';
+        root.className = "pt-24 pb-12 px-4 max-w-md mx-auto min-h-screen flex flex-col items-center justify-center screen-fade-in";
     }
 };

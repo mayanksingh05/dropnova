@@ -43,10 +43,21 @@ document.addEventListener('DOMContentLoaded', () => {
 // ================= GLOBAL =================
 window.cleanupConnection = cleanupConnection;
 window.isManualDisconnect = false;
+window.__disconnectHandled = false;
 
 // ================= MANUAL DISCONNECT =================
 window.handleDisconnect = function () {
+
+    if (window.__disconnectHandled) return;
+    window.__disconnectHandled = true;
+
     window.isManualDisconnect = true;
+
+    try {
+        if (window.socket && window.socket.readyState === 1) {
+            window.socket.send(JSON.stringify({ type: "disconnect" }));
+        }
+    } catch {}
 
     try {
         if (dataChannel?.readyState === "open") {
@@ -54,50 +65,94 @@ window.handleDisconnect = function () {
         }
     } catch {}
 
-    try {
-        if (window.socket && window.socket.readyState === 1) {
-            window.socket.send(JSON.stringify({ type: "peer-disconnected" }));
-        }
-    } catch {}
-
     cleanupConnection();
 
-    window.disconnectMessage = "You disconnected";
+    // 🔥 SHOW POPUP IMMEDIATELY
+    showDisconnectPopup("You disconnected");
+
     router.navigate("home");
 };
+
 // ================= PEER DISCONNECT =================
 window.handlePeerDisconnect = function () {
 
-    if (window.isManualDisconnect || window.peerManuallyDisconnected) return;
+    if (window.__disconnectHandled) return;
+    window.__disconnectHandled = true;
 
-    if (window.wasConnectedOnce) {
-        cleanupConnection();
-
-        window.disconnectMessage = "Other user disconnected";
-
-        window.receivedFiles = [];
-        window.fileQueue = [];
-        window.lastSentFile = null;
-
-        router.navigate("home");
-        return;
-    }
-
-    router.navigate("reconnect");
-};
-
-// ================= RECONNECT CANCEL =================
-window.cancelReconnect = function () {
-    window.isManualDisconnect = true;
     cleanupConnection();
+
+    // 🔥 SHOW POPUP IMMEDIATELY
+    showDisconnectPopup("Other user disconnected");
+
+    // reset state
+    window.receivedFiles = [];
+    window.fileQueue = [];
+    window.lastSentFile = null;
+
     router.navigate("home");
 };
 
-// 🔥 TAB CLOSE DETECTION
+// ================= TEMPORARY DISCONNECT =================
+window.handleTemporaryDisconnect = function () {
+    if (window.__disconnectHandled) return;
+
+    if (window.currentScreen !== "reconnect") {
+        router.navigate("reconnect");
+    }
+};
+
+// ================= RECONNECT SUCCESS =================
+window.handleReconnectSuccess = function () {
+    if (window.currentScreen === "reconnect") {
+        router.navigate("connected");
+    }
+};
+
+// ================= CANCEL RECONNECT =================
+window.cancelReconnect = function () {
+    window.handleDisconnect();
+};
+
+// ================= GLOBAL POPUP FUNCTION =================
+function showDisconnectPopup(message) {
+
+    // remove existing popup
+    const old = document.getElementById("disconnect-popup");
+    if (old) old.remove();
+
+    const div = document.createElement("div");
+    div.id = "disconnect-popup";
+
+    div.innerHTML = `
+        <div style="
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,0,0,0.15);
+            color: #ff4d4d;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            z-index: 99999;
+            backdrop-filter: blur(10px);
+        ">
+            ${message}
+        </div>
+    `;
+
+    document.body.appendChild(div);
+
+    setTimeout(() => {
+        div.remove();
+    }, 3000);
+}
+
+// ================= TAB CLOSE =================
 window.addEventListener("beforeunload", () => {
     try {
-        if (window.dataChannel?.readyState === "open") {
-            window.dataChannel.send(JSON.stringify({ type: "disconnect" }));
+        if (window.socket && window.socket.readyState === 1) {
+            window.socket.send(JSON.stringify({ type: "disconnect" }));
         }
     } catch {}
 });

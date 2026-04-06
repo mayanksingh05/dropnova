@@ -10,7 +10,8 @@ export const Receiving = () => {
             <p class="text-sm opacity-60">Do not close this tab</p>
         </div>
 
-        <div class="p-4 glass-card space-y-2 text-left">
+        <div class="p-4 glass-card space-y-3 text-left">
+
             <p class="font-bold text-sm truncate">${file.name || "Preparing..."}</p>
 
             <div class="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
@@ -20,8 +21,9 @@ export const Receiving = () => {
             <div class="flex justify-between text-xs font-mono opacity-70">
                 <span id="percent-${file.id}">0%</span>
                 <span>Receiving...</span>
-                <span>--</span>
+                <span>${window.currentSpeed || "0"} MB/s</span>
             </div>
+
         </div>
 
     </div>

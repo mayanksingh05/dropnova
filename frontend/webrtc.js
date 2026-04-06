@@ -7,27 +7,6 @@ const config = {
     ]
 };
 
-// 🔥 TURN fallback
-setTimeout(() => {
-    if (!peerConnection || peerConnection.connectionState === "connected") return;
-
-    peerConnection.setConfiguration({
-        iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            {
-                urls: "turn:openrelay.metered.ca:80",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            },
-            {
-                urls: "turn:openrelay.metered.ca:443",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            }
-        ]
-    });
-}, 2000);
-
 export function createConnection(socket, isSender, onConnected) {
     window.receiverReady = false;
     window.fileAckReceived = false;
@@ -70,6 +49,7 @@ export function createConnection(socket, isSender, onConnected) {
         window.lastSentFile = null;
         window.fileQueue = [];
         window.__sendingStarted = false;
+        window.receivedFiles = [];
 
         if (!connected) {
             connected = true;
@@ -94,24 +74,20 @@ export function createConnection(socket, isSender, onConnected) {
         const state = peerConnection.iceConnectionState;
 
         if (state === "connected" || state === "completed") {
-            if (window.disconnectTimer) {
-                clearTimeout(window.disconnectTimer);
-                window.disconnectTimer = null;
+
+            window.__disconnectHandled = false;
+
+            if (window.handleReconnectSuccess) {
+                window.handleReconnectSuccess();
             }
+
             safeConnect();
         }
 
         if (state === "disconnected") {
-            if (window.disconnectTimer) clearTimeout(window.disconnectTimer);
 
-            window.disconnectTimer = setTimeout(() => {
-                if (window.handlePeerDisconnect) {
-                    window.handlePeerDisconnect();
-                }
-            }, 4000);
-
-            if (!window.isManualDisconnect && !window.peerManuallyDisconnected) {
-                router.navigate("reconnect");
+            if (!window.isManualDisconnect) {
+                window.handleTemporaryDisconnect?.();
             }
         }
 
@@ -143,6 +119,9 @@ export function createConnection(socket, isSender, onConnected) {
 
             if (window.isManualDisconnect) return;
 
+            // 🔥 FORCE allow disconnect handling
+            window.__disconnectHandled = false;
+
             window.handlePeerDisconnect?.();
         };
     }
@@ -158,6 +137,9 @@ export function createConnection(socket, isSender, onConnected) {
     socket.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);
         if (data.type === "force-disconnect") {
+            window.handlePeerDisconnect?.();
+        }
+        if (data.type === "disconnect") {
             window.handlePeerDisconnect?.();
         }
 

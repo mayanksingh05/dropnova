@@ -22,38 +22,39 @@ export const Connected = () => {
             <h2 class="text-2xl font-bold">Devices Connected</h2>
             <p class="text-green-400 text-sm">Secure connection established</p>
             <p class="text-xs opacity-70">${mode}</p>
-            <p class="text-xs opacity-50">
-                Tip: Same WiFi / Hotspot = much faster ⚡
-            </p>
         </div>
 
         ${
             isSender ? `
             <div class="w-full space-y-4">
 
-                <div class="w-full p-12 border-2 border-dashed border-white/20 
+                <!-- 🔥 smaller box -->
+                <div class="w-full p-8 border-2 border-dashed border-white/20 
                 rounded-3xl cursor-pointer hover:border-primary transition-all duration-300"
                 onclick="document.getElementById('file-input').click()">
 
-                    <input type="file" id="file-input" class="hidden" multiple
+                    <input type="file" id="file-input" class="hidden"
                     onchange="handleFileSelect(event)">
 
-                    <div class="text-5xl mb-4">📄</div>
-                    <p class="font-bold text-lg">Select Files</p>
-                    <p class="text-sm opacity-60 mt-2">Multiple supported</p>
-                </div>
-
-                <!-- 🔥 TRANSFER LIST (SENDER + RECEIVER SAME UI) -->
-                <div class="w-full space-y-2">
-                    <p class="text-sm opacity-60 text-left">Transfers</p>
-                    <div id="transfer-list" class="space-y-3"></div>
+                    <div class="text-4xl mb-3">📄</div>
+                    <p class="font-bold text-base">Select File</p>
+                    <p class="text-xs opacity-60 mt-1">Send to connected device</p>
                 </div>
 
             </div>
             ` : `
-            <div class="w-full space-y-2">
-                <p class="text-sm opacity-60 text-left">Incoming Files</p>
-                <div id="transfer-list" class="space-y-3"></div>
+            <div class="w-full space-y-4">
+
+                <!-- 🔥 dummy box for receiver -->
+                <div class="w-full p-8 border-2 border-dashed border-white/10 
+                rounded-3xl opacity-60">
+
+                    <div class="text-4xl mb-3">📥</div>
+                    <p class="font-bold text-base">Waiting for files</p>
+                    <p class="text-xs opacity-60 mt-1">Files will appear automatically</p>
+
+                </div>
+
             </div>
             `
         }

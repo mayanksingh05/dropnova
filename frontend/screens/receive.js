@@ -25,7 +25,12 @@ window.connectDevice = function () {
     };
 
     socket.onclose = () => {
-        console.log("[WS] closed");
+        if (window.isManualDisconnect) return;
+
+        // 🔥 allow disconnect handler to run
+        window.__disconnectHandled = false;
+
+        window.handlePeerDisconnect?.();
     };
 
     window.socket = socket;

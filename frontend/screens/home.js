@@ -1,6 +1,5 @@
 // frontend/screens/home.js
 const message = window.disconnectMessage || "";
-window.disconnectMessage = null;
 
 export const Home = () => `
     <div class="text-center w-full space-y-8">
@@ -54,5 +53,10 @@ export const Home = () => `
             ${message}
         </div>
         ` : ""}
+        <script>
+            setTimeout(() => {
+                window.disconnectMessage = null;
+            }, 100);
+        </script>
     </div>
 `;

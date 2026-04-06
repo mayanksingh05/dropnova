@@ -5,6 +5,9 @@ let incomingFile = null;
 let receivedSize = 0;
 let fileBuffer = [];
 
+let lastTime = 0;
+let lastBytes = 0;
+
 let currentFileId = null;
 let currentFileSize = 0;
 
@@ -12,6 +15,7 @@ window.receiverReady = false;
 window.fileAckReceived = false;
 window.fileQueue = [];
 window.sentFiles = [];
+window.currentSpeed = "0";
 
 // ================= PROGRESS ENGINE =================
 const targetProgress = {};
@@ -54,30 +58,6 @@ function startProgressEngine() {
     requestAnimationFrame(loop);
 }
 
-// ================= UI =================
-function createFileUI(id, name, type) {
-    const list = document.getElementById("transfer-list");
-    if (!list) return;
-
-    const color = type === "send" ? "bg-primary" : "bg-green-500";
-    const label = type === "send" ? "Sending..." : "Receiving...";
-
-    list.innerHTML += `
-<div id="file-${id}" class="p-4 glass-card space-y-2 text-left">
-    <p class="font-bold text-sm truncate">${name}</p>
-
-    <div class="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-        <div id="bar-${id}" class="h-full ${color}" style="width:0%"></div>
-    </div>
-
-    <div class="flex justify-between text-xs font-mono opacity-70">
-        <span id="percent-${id}">0%</span>
-        <span>${label}</span>
-        <span>--</span>
-    </div>
-</div>`;
-}
-
 // ================= RECEIVER =================
 window.handleIncomingData = async function (data) {
 
@@ -90,16 +70,19 @@ window.handleIncomingData = async function (data) {
             incomingFile = msg;
             receivedSize = 0;
             fileBuffer = [];
+            window.currentSpeed = "0.01";
+            window.__speedSamples = [];
+            lastTime = 0;
+            lastBytes = 0;
+
             window.incomingFile = msg;
 
             targetProgress[msg.id] = 0;
             displayedProgress[msg.id] = 0;
             startProgressEngine();
 
-            // 🔥 go to receiving screen
             router.navigate("receiving");
 
-            // notify sender ready
             setTimeout(() => {
                 if (dataChannel?.readyState === "open") {
                     dataChannel.send(JSON.stringify({ type: "ready" }));
@@ -112,8 +95,9 @@ window.handleIncomingData = async function (data) {
             window.receiverReady = true;
         }
 
-        // PROGRESS (sender side)
+        // PROGRESS (SENDER SIDE UPDATE)
         else if (msg.type === "progress" && window.isSender) {
+
             if (!currentFileSize) return;
 
             const percent = Math.floor((msg.received / currentFileSize) * 100);
@@ -124,6 +108,9 @@ window.handleIncomingData = async function (data) {
             }
 
             targetProgress[msg.id] = percent;
+
+            // 🔥 FIX: receive speed from receiver
+            window.currentSpeed = msg.speed || "0";
         }
 
         // END (receiver)
@@ -144,7 +131,6 @@ window.handleIncomingData = async function (data) {
                 dataChannel.send(JSON.stringify({ type: "ack" }));
             }
 
-            // 🔥 go completed (receiver)
             setTimeout(() => {
                 router.navigate("completed");
             }, 1200);
@@ -152,6 +138,7 @@ window.handleIncomingData = async function (data) {
 
         // ACK (sender)
         else if (msg.type === "ack") {
+
             window.fileAckReceived = true;
 
             if (window.lastSentFile) {
@@ -161,7 +148,6 @@ window.handleIncomingData = async function (data) {
                 });
             }
 
-            // 🔥 go completed (sender)
             setTimeout(() => {
                 router.navigate("completed");
             }, 1200);
@@ -173,14 +159,47 @@ window.handleIncomingData = async function (data) {
         }
 
     } else {
-        // CHUNKS (receiver)
+        // ================= CHUNKS (RECEIVER) =================
+
         fileBuffer.push(data);
         receivedSize += data.byteLength;
+
+        // 🔥 FORCE FIRST SPEED DISPLAY (fix phone → laptop)
+        if (window.currentSpeed === "0") {
+            const instantSpeed = data.byteLength / 0.2; // assume ~200ms
+            window.currentSpeed = (instantSpeed / (1024 * 1024)).toFixed(2);
+        }
+
+        // ===== NEW STABLE SPEED SYSTEM =====
+        if (!window.__speedSamples) window.__speedSamples = [];
+
+        const now = Date.now();
+
+        window.__speedSamples.push({
+            time: now,
+            bytes: receivedSize
+        });
+
+        // keep last 2 seconds only
+        window.__speedSamples = window.__speedSamples.filter(s => now - s.time <= 2000);
+
+        if (window.__speedSamples.length >= 2) {
+            const first = window.__speedSamples[0];
+            const last = window.__speedSamples[window.__speedSamples.length - 1];
+
+            const timeDiff = (last.time - first.time) / 1000;
+            const byteDiff = last.bytes - first.bytes;
+
+            if (timeDiff > 0) {
+                const speed = byteDiff / timeDiff;
+                window.currentSpeed = (speed / (1024 * 1024)).toFixed(2);
+            }
+        }
 
         const percent = Math.floor((receivedSize / incomingFile.size) * 100);
         targetProgress[incomingFile.id] = percent;
 
-        // throttle progress send
+        // send progress + speed
         if (!window.lastProgressSent) window.lastProgressSent = 0;
 
         if (Date.now() - window.lastProgressSent > 100) {
@@ -190,7 +209,8 @@ window.handleIncomingData = async function (data) {
                 dataChannel.send(JSON.stringify({
                     type: "progress",
                     id: incomingFile.id,
-                    received: receivedSize
+                    received: receivedSize,
+                    speed: window.currentSpeed
                 }));
             }
         }
@@ -202,7 +222,6 @@ window.handleFileSelect = function (event) {
     const files = Array.from(event.target.files);
     if (!files.length) return;
 
-    // 🔥 ONLY ONE FILE AT A TIME
     window.fileQueue = [files[0]];
 
     if (!window.__sendingStarted) {
@@ -214,10 +233,7 @@ window.handleFileSelect = function (event) {
 async function waitForChannel() {
     let wait = 0;
 
-    while (
-        (!dataChannel || dataChannel.readyState !== "open") &&
-        wait < 10000
-    ) {
+    while ((!dataChannel || dataChannel.readyState !== "open") && wait < 10000) {
         await new Promise(r => setTimeout(r, 100));
         wait += 100;
     }
@@ -256,8 +272,7 @@ async function sendFile(file) {
     displayedProgress[fileId] = 0;
     startProgressEngine();
 
-    await waitForTransferList();
-        window.incomingFile = {
+    window.incomingFile = {
         id: fileId,
         name: file.name
     };
@@ -271,22 +286,24 @@ async function sendFile(file) {
         size: file.size
     }));
 
-    // WAIT READY
     let wait = 0;
     while (!window.receiverReady && wait < 10000) {
         await new Promise(r => setTimeout(r, 50));
         wait += 50;
     }
 
-    // SEND CHUNKS (FAST + SAFE)
     let offset = 0;
-    const chunkSize = 64 * 1024;
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+    // 🔥 adaptive chunk size
+    const chunkSize = isMobile ? 16 * 1024 : 64 * 1024;
 
     while (offset < file.size) {
 
-        // 🔥 buffer control (important mobile)
-        if (dataChannel.bufferedAmount > 512 * 1024) {
-            await new Promise(r => setTimeout(r, 2));
+        const limit = isMobile ? 256 * 1024 : 512 * 1024;
+
+        if (dataChannel.bufferedAmount > limit) {
+            await new Promise(r => setTimeout(r, isMobile ? 5 : 2));
             continue;
         }
 
@@ -299,7 +316,6 @@ async function sendFile(file) {
 
     dataChannel.send(JSON.stringify({ type: "file-end" }));
 
-    // WAIT ACK
     let ackWait = 0;
     while (!window.fileAckReceived && ackWait < 10000) {
         await new Promise(r => setTimeout(r, 50));
@@ -308,11 +324,3 @@ async function sendFile(file) {
 }
 
 export { processQueue };
-async function waitForTransferList() {
-    let tries = 0;
-
-    while (!document.getElementById("transfer-list") && tries < 60) {
-        await new Promise(r => setTimeout(r, 30));
-        tries++;
-    }
-}
