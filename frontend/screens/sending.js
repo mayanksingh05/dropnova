@@ -21,7 +21,6 @@ export const Sending = () => {
             <div class="flex justify-between text-xs font-mono opacity-70">
                 <span id="percent-${file.id}">0%</span>
                 <span>Sending...</span>
-                <span>${window.currentSpeed || "0"} MB/s</span>
             </div>
 
         </div>

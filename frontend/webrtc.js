@@ -16,10 +16,6 @@ export function createConnection(socket, isSender, onConnected) {
         try { peerConnection.close(); } catch {}
     }
 
-    if (window.pingInterval) {
-        clearInterval(window.pingInterval);
-    }
-
     peerConnection = new RTCPeerConnection({
         iceServers: config.iceServers,
         iceTransportPolicy: "all",
@@ -31,19 +27,7 @@ export function createConnection(socket, isSender, onConnected) {
     let iceQueue = [];
     let connected = false;
 
-    function detectConnectionType() {
-        peerConnection.getStats().then(stats => {
-            stats.forEach(report => {
-                if (report.type === "candidate-pair" && report.selected) {
-                    window.connectionMode =
-                        report.localCandidateType === "relay" ? "relay" : "direct";
-                }
-            });
-        });
-    }
-
     function safeConnect() {
-        // 🔥 CLEAN STATE (CRITICAL FIX)
         window.receiverReady = false;
         window.fileAckReceived = false;
         window.lastSentFile = null;
@@ -53,144 +37,71 @@ export function createConnection(socket, isSender, onConnected) {
 
         if (!connected) {
             connected = true;
-            window.wasConnectedOnce = true;
-
-            detectConnectionType();
             onConnected && onConnected();
         }
     }
 
-    // ICE
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-            socket.send(JSON.stringify({
-                type: "ice",
-                candidate: event.candidate
-            }));
+            socket.send(JSON.stringify({ type: "ice", candidate: event.candidate }));
         }
     };
 
     peerConnection.oniceconnectionstatechange = () => {
         const state = peerConnection.iceConnectionState;
-
         if (state === "connected" || state === "completed") {
-
             window.__disconnectHandled = false;
-
-            if (window.handleReconnectSuccess) {
-                window.handleReconnectSuccess();
-            }
-
             safeConnect();
-        }
-
-        if (state === "disconnected") {
-
-            if (!window.isManualDisconnect) {
-                window.handleTemporaryDisconnect?.();
-            }
-        }
-
-        if (state === "failed") {
+        } else if (state === "disconnected" || state === "failed" || state === "closed") {
             window.handlePeerDisconnect?.();
         }
     };
 
-    // DATA CHANNEL
     function setupChannel(channel) {
         dataChannel = channel;
+        // 🔥 CRITICAL FIX: Force binary array for mathematical accuracy
+        dataChannel.binaryType = "arraybuffer"; 
+        dataChannel.bufferedAmountLowThreshold = 256 * 1024;
 
-        dataChannel.onopen = () => {
-            safeConnect();
-
-            window.pingInterval = setInterval(() => {
-                if (dataChannel?.readyState === "open") {
-                    dataChannel.send(JSON.stringify({ type: "ping" }));
-                }
-            }, 3000);
-        };
-
-        dataChannel.onmessage = (event) => {
-            window.handleIncomingData?.(event.data);
-        };
-
+        dataChannel.onopen = () => safeConnect();
+        dataChannel.onmessage = (event) => window.handleIncomingData?.(event.data);
         dataChannel.onclose = () => {
-            if (window.pingInterval) clearInterval(window.pingInterval);
-
-            if (window.isManualDisconnect) return;
-
-            // 🔥 FORCE allow disconnect handling
-            window.__disconnectHandled = false;
-
-            window.handlePeerDisconnect?.();
+            if (!window.isManualDisconnect) window.handlePeerDisconnect?.();
         };
     }
 
-    if (isSender) {
-        setupChannel(peerConnection.createDataChannel("file"));
-    } else {
-        peerConnection.ondatachannel = (e) => {
-            setupChannel(e.channel);
-        };
-    }
+    if (isSender) setupChannel(peerConnection.createDataChannel("file"));
+    else peerConnection.ondatachannel = (e) => setupChannel(e.channel);
 
     socket.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);
-        if (data.type === "force-disconnect") {
+        
+        if (data.type === "room-destroyed" || data.type === "disconnect") {
             window.handlePeerDisconnect?.();
         }
-        if (data.type === "disconnect") {
-            window.handlePeerDisconnect?.();
-        }
-
         if (data.type === "offer") {
             await peerConnection.setRemoteDescription(data.offer);
             remoteDescSet = true;
-
-            for (const ice of iceQueue) {
-                await peerConnection.addIceCandidate(ice);
-            }
+            for (const ice of iceQueue) await peerConnection.addIceCandidate(ice);
             iceQueue = [];
-
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
-
-            socket.send(JSON.stringify({
-                type: "answer",
-                answer
-            }));
+            socket.send(JSON.stringify({ type: "answer", answer }));
         }
-
         if (data.type === "answer") {
             await peerConnection.setRemoteDescription(data.answer);
             remoteDescSet = true;
-
-            for (const ice of iceQueue) {
-                await peerConnection.addIceCandidate(ice);
-            }
+            for (const ice of iceQueue) await peerConnection.addIceCandidate(ice);
             iceQueue = [];
         }
-
         if (data.type === "ice") {
-            if (remoteDescSet) {
-                await peerConnection.addIceCandidate(data.candidate);
-            } else {
-                iceQueue.push(data.candidate);
-            }
+            if (remoteDescSet) await peerConnection.addIceCandidate(data.candidate);
+            else iceQueue.push(data.candidate);
         }
-
         if (data.type === "join" && isSender) {
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
-
-            socket.send(JSON.stringify({
-                type: "offer",
-                offer
-            }));
-        }
-
-        if (data.type === "peer-disconnected") {
-            window.handlePeerDisconnect?.();
+            socket.send(JSON.stringify({ type: "offer", offer }));
         }
     };
 }
@@ -198,14 +109,7 @@ export function createConnection(socket, isSender, onConnected) {
 export function cleanupConnection() {
     try { peerConnection?.close(); } catch {}
     try { dataChannel?.close(); } catch {}
-
-    if (window.pingInterval) {
-        clearInterval(window.pingInterval);
-        window.pingInterval = null;
-    }
-
     window.receiverReady = false;
-
     try { window.socket?.close(); } catch {}
     window.socket = null;
 }

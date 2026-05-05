@@ -1,5 +1,3 @@
-// frontend/screens/completed.js
-
 export const Completed = () => {
     const isSender = window.isSender;
 
@@ -20,37 +18,29 @@ export const Completed = () => {
         ? "Send Another File"
         : "Receive More Files";
 
-    // 🔥 RECEIVER FILE LIST UI
-    const receivedList = files.map((file, i) => `
+    // 📥 RECEIVER FILE LIST UI (No Download Button)
+    const receivedList = files.map((file) => `
         <div class="p-4 glass-card flex items-center justify-between gap-4">
             <div class="text-left min-w-0">
                 <p class="font-bold truncate">${file.name}</p>
-                <p class="text-xs opacity-50">${formatSize(file.size)}</p>
+                <p class="text-xs opacity-50">${formatSize(file.size)} • Saved to disk</p>
             </div>
-
-            <button 
-                onclick="downloadFile(${i})"
-                class="px-4 py-2 rounded-xl bg-primary text-white text-sm hover:scale-105 transition">
-                ⬇
-            </button>
         </div>
     `).join("");
 
-    // 🔥 SENDER FILE UI
+    // 📤 SENDER FILE UI
     const sentFiles = window.sentFiles || [];
 
     const senderBox = `
     <div class="w-full space-y-2">
         ${sentFiles.map(file => `
             <div class="p-4 glass-card flex items-center justify-between gap-4">
-
                 <div class="text-left min-w-0">
                     <p class="font-bold truncate">${file.name}</p>
                     <p class="text-xs opacity-50">
                         ${formatSize(file.size)} • Sent Successfully
                     </p>
                 </div>
-
             </div>
         `).join("")}
     </div>
@@ -86,16 +76,4 @@ export const Completed = () => {
 
     </div>
     `;
-};
-
-// 🔥 DOWNLOAD FUNCTION
-window.downloadFile = function(index) {
-    const file = window.receivedFiles[index];
-    if (!file) return;
-
-    const url = URL.createObjectURL(file.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = file.name;
-    a.click();
 };

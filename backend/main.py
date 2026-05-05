@@ -1,7 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 app = FastAPI()
-
 rooms = {}
 
 @app.get("/")
@@ -15,14 +14,14 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
     if room_id not in rooms:
         rooms[room_id] = []
 
-    # ❌ LIMIT TO 2 USERS
+    # Limit to 2 users
     if len(rooms[room_id]) >= 2:
         await websocket.close()
         return
 
     rooms[room_id].append(websocket)
 
-    # 🔥 notify others someone joined
+    # Notify others someone joined
     for conn in rooms[room_id]:
         if conn != websocket:
             await conn.send_text('{"type":"join"}')
@@ -30,6 +29,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
     try:
         while True:
             data = await websocket.receive_text()
+
+            # 🔥 Heartbeat response
+            if data == '{"type":"ping"}':
+                await websocket.send_text('{"type":"pong"}')
+                continue
 
             for connection in rooms[room_id]:
                 if connection != websocket:
@@ -39,13 +43,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         if room_id in rooms and websocket in rooms[room_id]:
             rooms[room_id].remove(websocket)
 
-        # 🔥 notify remaining peer
+        # 🔥 Notify remaining peer and instantly destroy the ghost room
         for conn in rooms.get(room_id, []):
             try:
-                await conn.send_text('{"type":"peer-disconnected"}')
+                await conn.send_text('{"type":"room-destroyed"}')
             except:
                 pass
 
-        # ✅ SAFE CLEANUP (NEW)
-        if room_id in rooms and len(rooms[room_id]) == 0:
+        if room_id in rooms:
             del rooms[room_id]

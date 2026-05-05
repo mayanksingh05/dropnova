@@ -8,7 +8,8 @@ window.connectDevice = function () {
         return;
     }
 
-    const socket = new WebSocket(`wss://dropnova.onrender.com/ws/${code}`);
+    //const socket = new WebSocket(`wss://dropnova.onrender.com/ws/${code}`);
+    const socket = new WebSocket(`ws://localhost:8000/ws/${code}`);
 
     socket.onopen = () => {
         console.log("Receiver connected");

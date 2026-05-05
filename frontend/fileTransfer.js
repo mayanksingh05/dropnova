@@ -1,25 +1,41 @@
 import { dataChannel } from "./webrtc.js";
 
-// ================= STATE =================
+let directoryHandle = null;
+let transferMode = null; 
+let fileWriter = null;
 let incomingFile = null;
 let receivedSize = 0;
-let fileBuffer = [];
-
-let lastTime = 0;
-let lastBytes = 0;
-
 let currentFileId = null;
 let currentFileSize = 0;
 
+let writeQueue = Promise.resolve();
+
+window.batchAccepted = false;
+window.batchDeclined = false;
 window.receiverReady = false;
 window.fileAckReceived = false;
 window.fileQueue = [];
 window.sentFiles = [];
-window.currentSpeed = "0";
+window.__cancelTransfer = false;
 
-window.__cancelTransfer = false; // 🔥 NEW
+function safeSend(data) {
+    if (dataChannel && dataChannel.readyState === "open") {
+        try {
+            dataChannel.send(data);
+            return true;
+        } catch (e) {
+            console.error("Send blocked:", e);
+            return false;
+        }
+    }
+    return false;
+}
 
-// ================= PROGRESS ENGINE =================
+function clearMemory() {
+    incomingFile = null;
+    receivedSize = 0;
+}
+
 const targetProgress = {};
 const displayedProgress = {};
 let animationRunning = false;
@@ -27,200 +43,146 @@ let animationRunning = false;
 function startProgressEngine() {
     if (animationRunning) return;
     animationRunning = true;
-
     function loop() {
         for (const id in targetProgress) {
-            if (displayedProgress[id] === undefined) {
-                displayedProgress[id] = 0;
-            }
-
+            if (displayedProgress[id] === undefined) displayedProgress[id] = 0;
             let current = displayedProgress[id];
             const target = targetProgress[id];
-
+            
             current += (target - current) * 0.25;
-
-            if (Math.abs(target - current) < 0.3) {
-                current = target;
-            }
-
+            if (Math.abs(target - current) < 0.3) current = target;
+            
             displayedProgress[id] = current;
-
             const percent = Math.floor(current);
-
+            
             const bar = document.getElementById(`bar-${id}`);
             const p = document.getElementById(`percent-${id}`);
-
             if (bar) bar.style.width = percent + "%";
             if (p) p.innerText = percent + "%";
         }
-
         requestAnimationFrame(loop);
     }
-
     requestAnimationFrame(loop);
 }
 
-// ================= RECEIVER =================
-window.handleIncomingData = async function (data) {
+// ================= RECEIVER LOGIC =================
+window.handleIncomingData = function (data) {
+    writeQueue = writeQueue.then(async () => {
+        
+        if (window.__cancelTransfer) return;
 
-    if (typeof data === "string") {
-        const msg = JSON.parse(data);
+        if (typeof data === "string") {
+            const msg = JSON.parse(data);
 
-        if (msg.type === "file-meta") {
-
-            incomingFile = msg;
-            receivedSize = 0;
-            fileBuffer = [];
-            window.currentSpeed = "0";
-            window.__speedSamples = [];
-
-            window.incomingFile = msg;
-
-            targetProgress[msg.id] = 0;
-            displayedProgress[msg.id] = 0;
-            startProgressEngine();
-
-            router.navigate("receiving");
-
-            setTimeout(() => {
-                if (dataChannel?.readyState === "open") {
-                    dataChannel.send(JSON.stringify({ type: "ready" }));
+            if (msg.type === "batch-request") {
+                const accepted = await new Promise(resolve => window.showBatchAcceptPrompt(msg.files, resolve));
+                if (accepted) {
+                    if ('showDirectoryPicker' in window) {
+                        try {
+                            directoryHandle = await window.showDirectoryPicker();
+                            transferMode = "directory";
+                            safeSend(JSON.stringify({ type: "batch-accept" }));
+                        } catch (e) {
+                            safeSend(JSON.stringify({ type: "batch-decline" }));
+                        }
+                    } else {
+                        transferMode = "fallback";
+                        safeSend(JSON.stringify({ type: "batch-accept" }));
+                    }
+                } else {
+                    safeSend(JSON.stringify({ type: "batch-decline" }));
                 }
-            }, 50);
-        }
-
-        else if (msg.type === "ready") {
-            window.receiverReady = true;
-        }
-
-        else if (msg.type === "progress" && window.isSender) {
-
-            if (!currentFileSize) return;
-
-            const percent = Math.floor((msg.received / currentFileSize) * 100);
-
-            if (!targetProgress[msg.id]) {
+            }
+            else if (msg.type === "batch-accept") window.batchAccepted = true;
+            else if (msg.type === "batch-decline") window.batchDeclined = true;
+            
+            else if (msg.type === "file-start") {
+                clearMemory(); 
+                incomingFile = msg;
+                window.incomingFile = msg;
+                
                 targetProgress[msg.id] = 0;
                 displayedProgress[msg.id] = 0;
-            }
+                startProgressEngine();
+                router.navigate("receiving");
 
-            targetProgress[msg.id] = percent;
-            window.currentSpeed = msg.speed || "0";
-        }
-
-        else if (msg.type === "file-end") {
-
-            const blob = new Blob(fileBuffer);
-
-            if (!window.receivedFiles) window.receivedFiles = [];
-            window.receivedFiles.push({
-                name: incomingFile.name,
-                size: incomingFile.size,
-                blob
-            });
-
-            targetProgress[incomingFile.id] = 100;
-
-            if (dataChannel?.readyState === "open") {
-                dataChannel.send(JSON.stringify({ type: "ack" }));
-            }
-
-            setTimeout(() => {
-                router.navigate("completed");
-            }, 1200);
-        }
-
-        else if (msg.type === "ack") {
-
-            window.fileAckReceived = true;
-
-            if (window.lastSentFile) {
-                window.sentFiles.push({
-                    name: window.lastSentFile.name,
-                    size: window.lastSentFile.size
-                });
-            }
-        }
-
-        else if (msg.type === "disconnect") {
-            window.handlePeerDisconnect();
-        }
-
-    } else {
-        // ================= CHUNKS (RECEIVER) =================
-
-        fileBuffer.push(data);
-        receivedSize += data.byteLength;
-
-        // ===== NEW STABLE SPEED SYSTEM =====
-        if (!window.__speedSamples) window.__speedSamples = [];
-
-        const now = Date.now();
-
-        window.__speedSamples.push({
-            time: now,
-            bytes: receivedSize
-        });
-
-        // keep last 2 seconds only
-        window.__speedSamples = window.__speedSamples.filter(s => now - s.time <= 2000);
-
-        if (window.__speedSamples.length >= 2) {
-            const first = window.__speedSamples[0];
-            const last = window.__speedSamples[window.__speedSamples.length - 1];
-
-            const timeDiff = (last.time - first.time) / 1000;
-            const byteDiff = last.bytes - first.bytes;
-
-            // 🔥 FIX 1: avoid unstable tiny windows
-            if (timeDiff > 0.2) {
-
-                const newSpeed = byteDiff / timeDiff;
-                const newMB = (newSpeed / (1024 * 1024));
-
-                // 🔥 FIX 2: smooth speed (no spikes / no 0)
-                if (!window.currentSpeed || window.currentSpeed === "0") {
-                    window.currentSpeed = newMB.toFixed(2);
-                } else {
-                    const smooth = (parseFloat(window.currentSpeed) * 0.7) + (newMB * 0.3);
-                    window.currentSpeed = smooth.toFixed(2);
+                try {
+                    if (transferMode === "directory") {
+                        const fileHandle = await directoryHandle.getFileHandle(msg.name, { create: true });
+                        fileWriter = await fileHandle.createWritable();
+                    } else {
+                        const ext = msg.name.split('.').pop().toLowerCase();
+                        const mimeType = ext === 'mp4' ? 'video/mp4' : 
+                                         ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 
+                                         ext === 'png' ? 'image/png' : 
+                                         ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+                        
+                        await new Promise(resolve => window.showSingleSavePrompt(msg.name, resolve));
+                        const handle = await window.showSaveFilePicker({ 
+                            suggestedName: msg.name,
+                            types: [{ description: `${ext.toUpperCase()} File`, accept: { [mimeType]: [`.${ext}`] } }]
+                        });
+                        fileWriter = await handle.createWritable();
+                    }
+                    safeSend(JSON.stringify({ type: "ready" }));
+                } catch (e) {
+                    safeSend(JSON.stringify({ type: "error" }));
                 }
             }
-        }
+            else if (msg.type === "ready") window.receiverReady = true;
+            
+            else if (msg.type === "progress" && window.isSender) {
+                if (!currentFileSize) return;
+                targetProgress[msg.id] = Math.floor((msg.received / currentFileSize) * 100);
+            }
+            
+            else if (msg.type === "file-end") {
+                if (fileWriter) {
+                    await fileWriter.close();
+                    fileWriter = null;
+                }
+                targetProgress[incomingFile.id] = 100;
+                
+                if (!window.receivedFiles) window.receivedFiles = [];
+                window.receivedFiles.push({ name: incomingFile.name, size: incomingFile.size });
 
-        // 🔥 FIX 3: prevent 0 display when data flowing
-        if (window.currentSpeed === "0" && receivedSize > 0) {
-            window.currentSpeed = "0.1";
-        }
+                safeSend(JSON.stringify({ type: "ack" }));
+            }
+            else if (msg.type === "ack") {
+                window.fileAckReceived = true;
+                if (window.lastSentFile) window.sentFiles.push({ name: window.lastSentFile.name, size: window.lastSentFile.size });
+            }
+            else if (msg.type === "batch-complete") {
+                setTimeout(() => router.navigate("completed"), 1000);
+            }
+        } else {
+            // ================= WRITING CHUNKS =================
+            try {
+                if (fileWriter) {
+                    await fileWriter.write(data); 
+                }
+            } catch (e) {
+                console.error("Write failed, stream closed prematurely.", e);
+                return;
+            }
+            
+            receivedSize += data.byteLength;
+            targetProgress[incomingFile.id] = Math.floor((receivedSize / incomingFile.size) * 100);
 
-        const percent = Math.floor((receivedSize / incomingFile.size) * 100);
-        targetProgress[incomingFile.id] = percent;
-
-        // send progress + speed
-        if (!window.lastProgressSent) window.lastProgressSent = 0;
-
-        if (Date.now() - window.lastProgressSent > 100) {
-            window.lastProgressSent = Date.now();
-
-            if (dataChannel?.readyState === "open") {
-                dataChannel.send(JSON.stringify({
-                    type: "progress",
-                    id: incomingFile.id,
-                    received: receivedSize,
-                    speed: window.currentSpeed
-                }));
+            if (Date.now() - (window.lastProgressSent || 0) > 100) {
+                window.lastProgressSent = Date.now();
+                safeSend(JSON.stringify({ type: "progress", id: incomingFile.id, received: receivedSize }));
             }
         }
-    }
+    }).catch(err => {
+        console.error("Critical Queue Failure:", err);
+    });
 };
 
-// ================= FILE SELECT =================
 window.handleFileSelect = function (event) {
     const files = Array.from(event.target.files);
     if (!files.length) return;
-
-    window.fileQueue.push(...files); // 🔥 MULTI FILE
-
+    window.fileQueue.push(...files);
     if (!window.__sendingStarted) {
         window.__sendingStarted = true;
         window.__cancelTransfer = false;
@@ -228,43 +190,73 @@ window.handleFileSelect = function (event) {
     }
 };
 
-// ================= QUEUE =================
+window.cancelTransfer = function () {
+    window.__cancelTransfer = true;
+    window.fileQueue = []; 
+    clearMemory();
+    window.hideWaitingOverlay();
+    router.navigate("connected");
+};
+
+
+// ================= SENDER BATCH LOGIC =================
+
 async function processQueue() {
+    if (window.fileQueue.length === 0) return;
+
+    const filesMeta = window.fileQueue.map(f => ({ id: Date.now() + "_" + f.name, name: f.name, size: f.size }));
+    window.batchAccepted = false;
+    window.batchDeclined = false;
+
+    window.showWaitingOverlay(filesMeta.length);
+
+    if (!safeSend(JSON.stringify({ type: "batch-request", files: filesMeta }))) {
+        window.hideWaitingOverlay();
+        window.__sendingStarted = false;
+        return;
+    }
+
+    while (!window.batchAccepted && !window.batchDeclined && !window.__cancelTransfer) {
+        if (dataChannel?.readyState !== "open") {
+            window.__cancelTransfer = true;
+            break;
+        }
+        await new Promise(r => setTimeout(r, 100));
+    }
+
+    window.hideWaitingOverlay();
+
+    if (window.batchDeclined || window.__cancelTransfer) {
+        window.__sendingStarted = false;
+        window.fileQueue = []; 
+        if (window.batchDeclined) window.showTransferError("Transfer declined or folder access denied.");
+        return; 
+    }
+
     while (window.fileQueue.length > 0) {
-
         if (window.__cancelTransfer) break;
-
         const file = window.fileQueue.shift();
         await sendFile(file);
     }
 
     window.__sendingStarted = false;
 
-    if (!window.__cancelTransfer) {
+    if (!window.__cancelTransfer && dataChannel?.readyState === "open") {
+        safeSend(JSON.stringify({ type: "batch-complete" }));
         router.navigate("completed");
     }
 }
 
-// ================= CANCEL =================
-window.cancelTransfer = function () {
-    window.__cancelTransfer = true;
-    window.fileQueue = [];
-    window.receiverReady = false;
-    window.fileAckReceived = false;
-
-    router.navigate("connected"); // 🔥 stay connected
-};
-
-// ================= SENDER =================
 async function sendFile(file) {
-
     if (window.__cancelTransfer) return;
 
-    const fileId = Date.now() + "_" + file.name;
+    if (dataChannel) {
+        dataChannel.bufferedAmountLowThreshold = 1024 * 1024; 
+    }
 
+    const fileId = Date.now() + "_" + file.name;
     currentFileId = fileId;
     currentFileSize = file.size;
-
     window.lastSentFile = file;
     window.receiverReady = false;
     window.fileAckReceived = false;
@@ -273,73 +265,61 @@ async function sendFile(file) {
     displayedProgress[fileId] = 0;
     startProgressEngine();
 
-    window.incomingFile = {
-        id: fileId,
-        name: file.name
-    };
-
+    window.incomingFile = { id: fileId, name: file.name };
     router.navigate("sending");
 
-    dataChannel.send(JSON.stringify({
-        type: "file-meta",
-        id: fileId,
-        name: file.name,
-        size: file.size
-    }));
+    if (!safeSend(JSON.stringify({ type: "file-start", id: fileId, name: file.name, size: file.size }))) return;
 
-    let wait = 0;
-    while (!window.receiverReady && wait < 10000) {
-        if (window.__cancelTransfer) return;
+    while (!window.receiverReady && !window.__cancelTransfer) {
+        if (dataChannel?.readyState !== "open") {
+            window.__cancelTransfer = true;
+            break;
+        }
         await new Promise(r => setTimeout(r, 50));
-        wait += 50;
     }
 
     let offset = 0;
-    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-    const chunkSize = isMobile ? 16 * 1024 : 64 * 1024;
+    const chunkSize = 64 * 1024; 
 
     while (offset < file.size) {
+        if (window.__cancelTransfer || dataChannel?.readyState !== "open") {
+            window.__cancelTransfer = true;
+            break;
+        }
 
-        if (window.__cancelTransfer) return;
-
-        const limit = isMobile ? 256 * 1024 : 512 * 1024;
-
-        if (dataChannel.bufferedAmount > limit) {
-            await new Promise(r => setTimeout(r, isMobile ? 5 : 2));
-            continue;
+        if (dataChannel.bufferedAmount > dataChannel.bufferedAmountLowThreshold) {
+            await new Promise(resolve => {
+                dataChannel.addEventListener('bufferedamountlow', resolve, { once: true });
+            });
         }
 
         const chunk = file.slice(offset, offset + chunkSize);
-        const buffer = await chunk.arrayBuffer();
-
-        dataChannel.send(buffer);
+        
+        if (!safeSend(await chunk.arrayBuffer())) {
+            window.__cancelTransfer = true;
+            break;
+        }
+        
         offset += chunkSize;
     }
 
-    dataChannel.send(JSON.stringify({ type: "file-end" }));
-
-    let ackWait = 0;
-    while (!window.fileAckReceived && ackWait < 10000) {
-        if (window.__cancelTransfer) return;
-        await new Promise(r => setTimeout(r, 50));
-        ackWait += 50;
+    if (!window.__cancelTransfer && dataChannel?.readyState === "open") {
+        safeSend(JSON.stringify({ type: "file-end" }));
+        while (!window.fileAckReceived && !window.__cancelTransfer) {
+            if (dataChannel?.readyState !== "open") {
+                window.__cancelTransfer = true;
+                break;
+            }
+            await new Promise(r => setTimeout(r, 50));
+        }
     }
 }
 
 async function waitForChannel() {
-    let wait = 0;
-
-    while ((!dataChannel || dataChannel.readyState !== "open") && wait < 10000) {
+    while ((!dataChannel || dataChannel.readyState !== "open")) {
         await new Promise(r => setTimeout(r, 100));
-        wait += 100;
     }
-
-    if (!dataChannel || dataChannel.readyState !== "open") {
-        console.error("[SEND] channel failed");
-        return;
-    }
-
     processQueue();
 }
 
-export { processQueue };
+export { processQueue }; 
