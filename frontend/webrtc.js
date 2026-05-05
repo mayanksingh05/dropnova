@@ -2,9 +2,8 @@ export let peerConnection;
 export let dataChannel;
 
 const config = {
-    iceServers: [
-        { urls: "stun:stun.l.google.com:19302" }
-    ]
+    // STUN REMOVED AS REQUESTED FOR PURE LOCAL TESTING
+    iceServers: [] 
 };
 
 export function createConnection(socket, isSender, onConnected) {
@@ -59,7 +58,6 @@ export function createConnection(socket, isSender, onConnected) {
 
     function setupChannel(channel) {
         dataChannel = channel;
-        // 🔥 CRITICAL FIX: Force binary array for mathematical accuracy
         dataChannel.binaryType = "arraybuffer"; 
         dataChannel.bufferedAmountLowThreshold = 256 * 1024;
 

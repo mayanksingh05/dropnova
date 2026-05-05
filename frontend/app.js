@@ -2,6 +2,12 @@ import { router } from './router.js';
 import './fileTransfer.js';
 import { cleanupConnection, dataChannel } from './webrtc.js';
 
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+        reg.update(); 
+    }).catch(err => console.error("SW Registration Failed:", err));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     window.router = router;
     const themeToggle = document.getElementById('theme-toggle');
@@ -33,7 +39,6 @@ window.cleanupConnection = cleanupConnection;
 window.isManualDisconnect = false;
 window.__disconnectHandled = false;
 
-// Heartbeat
 setInterval(() => {
     if (window.socket && window.socket.readyState === 1) {
         window.socket.send(JSON.stringify({ type: "ping" }));
@@ -44,8 +49,6 @@ window.handleDisconnect = function () {
     if (window.__disconnectHandled) return;
     window.__disconnectHandled = true;
     window.isManualDisconnect = true;
-    
-    // 🔥 KILL SWITCH: Stop any active file loops
     window.__cancelTransfer = true; 
 
     try { window.socket?.send(JSON.stringify({ type: "disconnect" })); } catch {}
@@ -57,8 +60,6 @@ window.handleDisconnect = function () {
 window.handlePeerDisconnect = function () {
     if (window.__disconnectHandled) return;
     window.__disconnectHandled = true;
-
-    // 🔥 KILL SWITCH: Stop any active file loops
     window.__cancelTransfer = true; 
 
     cleanupConnection();
@@ -96,11 +97,13 @@ window.hideWaitingOverlay = function() {
 };
 
 window.showBatchAcceptPrompt = function(files, callback) {
-    const isDirSupported = 'showDirectoryPicker' in window;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const fileListHTML = files.map(f => `<p style="font-size:12px; margin:2px 0;">${f.name} (${(f.size/1024/1024).toFixed(2)} MB)</p>`).join('');
-    const warningHTML = isDirSupported 
-        ? `<p style="font-size:12px; color:#facc15; margin-bottom:15px;">You will be asked to select a folder to save all files automatically.</p>`
-        : `<p style="font-size:12px; color:#facc15; margin-bottom:15px;">Your mobile browser requires saving each file individually.</p>`;
+    
+    // 🔥 Remove the folder warning since we aren't using directories anymore
+    const warningHTML = isMobile 
+        ? `<p style="font-size:12px; color:#facc15; margin-bottom:15px;">Your mobile browser requires saving each file individually.</p>`
+        : `<p style="font-size:12px; color:#22c55e; margin-bottom:15px;">Files will prompt to save natively.</p>`;
 
     const div = document.createElement("div");
     div.innerHTML = `

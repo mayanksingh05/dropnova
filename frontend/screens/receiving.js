@@ -25,6 +25,12 @@ export const Receiving = () => {
 
         </div>
 
+        <!-- 🔥 NEW: Cancel Button for Receiver -->
+        <button onclick="cancelTransfer()" 
+        class="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-red-400 font-bold hover:bg-red-500/10 transition">
+            Cancel Transfer
+        </button>
+
     </div>
     `;
 };

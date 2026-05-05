@@ -1,8 +1,7 @@
 import { dataChannel } from "./webrtc.js";
 
-let directoryHandle = null;
+let fileWriter = null; 
 let transferMode = null; 
-let fileWriter = null;
 let incomingFile = null;
 let receivedSize = 0;
 let currentFileId = null;
@@ -17,16 +16,11 @@ window.fileAckReceived = false;
 window.fileQueue = [];
 window.sentFiles = [];
 window.__cancelTransfer = false;
+window.currentStreamPort = null;
 
 function safeSend(data) {
     if (dataChannel && dataChannel.readyState === "open") {
-        try {
-            dataChannel.send(data);
-            return true;
-        } catch (e) {
-            console.error("Send blocked:", e);
-            return false;
-        }
+        try { dataChannel.send(data); return true; } catch (e) { return false; }
     }
     return false;
 }
@@ -34,6 +28,10 @@ function safeSend(data) {
 function clearMemory() {
     incomingFile = null;
     receivedSize = 0;
+    if (window.currentStreamPort) {
+        window.currentStreamPort.postMessage({ type: 'ABORT' });
+        window.currentStreamPort = null;
+    }
 }
 
 const targetProgress = {};
@@ -68,30 +66,24 @@ function startProgressEngine() {
 // ================= RECEIVER LOGIC =================
 window.handleIncomingData = function (data) {
     writeQueue = writeQueue.then(async () => {
-        
         if (window.__cancelTransfer) return;
 
         if (typeof data === "string") {
             const msg = JSON.parse(data);
 
+            // 🔥 NEW: Global Kill Switch Listener
+            if (msg.type === "cancel" || msg.type === "error") {
+                window.__cancelTransfer = true;
+                window.showTransferError(msg.type === "cancel" ? "Transfer cancelled by peer." : "Peer network error.");
+                clearMemory();
+                router.navigate("connected");
+                return;
+            }
+
             if (msg.type === "batch-request") {
                 const accepted = await new Promise(resolve => window.showBatchAcceptPrompt(msg.files, resolve));
-                if (accepted) {
-                    if ('showDirectoryPicker' in window) {
-                        try {
-                            directoryHandle = await window.showDirectoryPicker();
-                            transferMode = "directory";
-                            safeSend(JSON.stringify({ type: "batch-accept" }));
-                        } catch (e) {
-                            safeSend(JSON.stringify({ type: "batch-decline" }));
-                        }
-                    } else {
-                        transferMode = "fallback";
-                        safeSend(JSON.stringify({ type: "batch-accept" }));
-                    }
-                } else {
-                    safeSend(JSON.stringify({ type: "batch-decline" }));
-                }
+                if (accepted) safeSend(JSON.stringify({ type: "batch-accept" }));
+                else safeSend(JSON.stringify({ type: "batch-decline" }));
             }
             else if (msg.type === "batch-accept") window.batchAccepted = true;
             else if (msg.type === "batch-decline") window.batchDeclined = true;
@@ -106,16 +98,15 @@ window.handleIncomingData = function (data) {
                 startProgressEngine();
                 router.navigate("receiving");
 
-                try {
-                    if (transferMode === "directory") {
-                        const fileHandle = await directoryHandle.getFileHandle(msg.name, { create: true });
-                        fileWriter = await fileHandle.createWritable();
-                    } else {
+                // 🔥 THE SMART SPLIT
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+                if (!isMobile && 'showSaveFilePicker' in window) {
+                    // PC/LAPTOP: Use Bulletproof Native API (Works perfectly in Incognito)
+                    transferMode = "native";
+                    try {
                         const ext = msg.name.split('.').pop().toLowerCase();
-                        const mimeType = ext === 'mp4' ? 'video/mp4' : 
-                                         ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 
-                                         ext === 'png' ? 'image/png' : 
-                                         ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+                        const mimeType = ext === 'mp4' ? 'video/mp4' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png' : 'application/octet-stream';
                         
                         await new Promise(resolve => window.showSingleSavePrompt(msg.name, resolve));
                         const handle = await window.showSaveFilePicker({ 
@@ -123,10 +114,38 @@ window.handleIncomingData = function (data) {
                             types: [{ description: `${ext.toUpperCase()} File`, accept: { [mimeType]: [`.${ext}`] } }]
                         });
                         fileWriter = await handle.createWritable();
+                        safeSend(JSON.stringify({ type: "ready" }));
+                    } catch (e) {
+                        safeSend(JSON.stringify({ type: "error" }));
                     }
-                    safeSend(JSON.stringify({ type: "ready" }));
-                } catch (e) {
-                    safeSend(JSON.stringify({ type: "error" }));
+                } else {
+                    // MOBILE: Use Service Worker Hack
+                    transferMode = "sw";
+                    const downloadUrl = `/sw-download/${Date.now()}_${encodeURIComponent(msg.name)}`;
+                    const channel = new MessageChannel();
+                    window.currentStreamPort = channel.port1;
+
+                    channel.port1.onmessage = (e) => {
+                        if (e.data.type === 'STREAM_READY') {
+                            const a = document.createElement('a');
+                            a.href = downloadUrl;
+                            a.download = msg.name;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            safeSend(JSON.stringify({ type: "ready" }));
+                        } 
+                        else if (e.data.type === 'STREAM_DRAINED') {
+                            window.currentStreamPort = null;
+                            safeSend(JSON.stringify({ type: "ack" }));
+                        } 
+                        else if (e.data.type === 'CANCELLED') {
+                            window.__cancelTransfer = true;
+                            safeSend(JSON.stringify({ type: "error" }));
+                        }
+                    };
+
+                    navigator.serviceWorker.controller.postMessage({ type: 'START_STREAM', url: downloadUrl, size: msg.size }, [channel.port2]);
                 }
             }
             else if (msg.type === "ready") window.receiverReady = true;
@@ -137,16 +156,21 @@ window.handleIncomingData = function (data) {
             }
             
             else if (msg.type === "file-end") {
-                if (fileWriter) {
-                    await fileWriter.close();
-                    fileWriter = null;
-                }
                 targetProgress[incomingFile.id] = 100;
-                
                 if (!window.receivedFiles) window.receivedFiles = [];
                 window.receivedFiles.push({ name: incomingFile.name, size: incomingFile.size });
 
-                safeSend(JSON.stringify({ type: "ack" }));
+                if (transferMode === "native") {
+                    if (fileWriter) { await fileWriter.close(); fileWriter = null; }
+                    safeSend(JSON.stringify({ type: "ack" }));
+                } else {
+                    if (window.currentStreamPort) {
+                        window.currentStreamPort.postMessage({ type: 'END' });
+                        // Wait for STREAM_DRAINED to send ack
+                    } else {
+                        safeSend(JSON.stringify({ type: "ack" }));
+                    }
+                }
             }
             else if (msg.type === "ack") {
                 window.fileAckReceived = true;
@@ -157,13 +181,10 @@ window.handleIncomingData = function (data) {
             }
         } else {
             // ================= WRITING CHUNKS =================
-            try {
-                if (fileWriter) {
-                    await fileWriter.write(data); 
-                }
-            } catch (e) {
-                console.error("Write failed, stream closed prematurely.", e);
-                return;
+            if (transferMode === "native") {
+                try { if (fileWriter) await fileWriter.write(data); } catch(e) { return; }
+            } else {
+                if (window.currentStreamPort) window.currentStreamPort.postMessage({ type: 'CHUNK', chunk: data });
             }
             
             receivedSize += data.byteLength;
@@ -192,6 +213,7 @@ window.handleFileSelect = function (event) {
 
 window.cancelTransfer = function () {
     window.__cancelTransfer = true;
+    safeSend(JSON.stringify({ type: "cancel" })); // 🔥 Send kill signal to peer
     window.fileQueue = []; 
     clearMemory();
     window.hideWaitingOverlay();
@@ -229,7 +251,7 @@ async function processQueue() {
     if (window.batchDeclined || window.__cancelTransfer) {
         window.__sendingStarted = false;
         window.fileQueue = []; 
-        if (window.batchDeclined) window.showTransferError("Transfer declined or folder access denied.");
+        if (window.batchDeclined) window.showTransferError("Transfer declined.");
         return; 
     }
 
@@ -322,4 +344,4 @@ async function waitForChannel() {
     processQueue();
 }
 
-export { processQueue }; 
+export { processQueue };
