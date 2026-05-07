@@ -2,7 +2,20 @@ import { router } from './router.js';
 import './fileTransfer.js';
 import { cleanupConnection, dataChannel } from './webrtc.js';
 
+// 🔥 NEW: OPFS Garbage Collector (Prevents Ghost Files from eating storage)
+async function cleanOPFS() {
+    if (!navigator.storage || !navigator.storage.getDirectory) return;
+    try {
+        const opfsRoot = await navigator.storage.getDirectory();
+        for await (const name of opfsRoot.keys()) {
+            await opfsRoot.removeEntry(name, { recursive: true });
+        }
+        console.log("OPFS Temporary Storage Cleared");
+    } catch(e) {}
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    cleanOPFS(); // Sweep storage on boot
     window.router = router;
     const themeToggle = document.getElementById('theme-toggle');
     const html = document.documentElement;

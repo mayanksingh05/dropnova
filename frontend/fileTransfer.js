@@ -17,8 +17,9 @@ window.fileQueue = [];
 window.sentFiles = [];
 window.__cancelTransfer = false;
 
-// 🔥 NEW: Store chunks for mobile Blob
-window.fileBuffer = []; 
+// OPFS Globals
+window.opfsFileHandle = null;
+window.opfsWriter = null;
 
 function safeSend(data) {
     if (dataChannel && dataChannel.readyState === "open") {
@@ -28,9 +29,20 @@ function safeSend(data) {
 }
 
 function clearMemory() {
+    if (window.opfsWriter) {
+        try { window.opfsWriter.close(); } catch(e){}
+        window.opfsWriter = null;
+    }
+    // Delete OPFS file if cancelled mid-transfer
+    if (window.opfsFileHandle && incomingFile) {
+        try {
+            navigator.storage.getDirectory().then(root => {
+                root.removeEntry(incomingFile.name).catch(e=>{});
+            });
+        } catch(e){}
+    }
     incomingFile = null;
     receivedSize = 0;
-    window.fileBuffer = []; // Free RAM
 }
 
 const targetProgress = {};
@@ -116,10 +128,19 @@ window.handleIncomingData = function (data) {
                         safeSend(JSON.stringify({ type: "error" }));
                     }
                 } else {
-                    // 🔥 MOBILE: Rock-solid Blob Fallback
-                    transferMode = "blob";
-                    window.fileBuffer = [];
-                    safeSend(JSON.stringify({ type: "ready" }));
+                    // 🔥 MOBILE: OPFS Virtual Hard Drive
+                    transferMode = "opfs";
+                    try {
+                        const opfsRoot = await navigator.storage.getDirectory();
+                        try { await opfsRoot.removeEntry(msg.name); } catch(e){} // Overwrite if exists
+
+                        window.opfsFileHandle = await opfsRoot.getFileHandle(msg.name, { create: true });
+                        window.opfsWriter = await window.opfsFileHandle.createWritable();
+                        safeSend(JSON.stringify({ type: "ready" }));
+                    } catch (err) {
+                        console.error("OPFS Access Error:", err);
+                        safeSend(JSON.stringify({ type: "error" }));
+                    }
                 }
             }
             else if (msg.type === "ready") window.receiverReady = true;
@@ -137,22 +158,37 @@ window.handleIncomingData = function (data) {
                 if (transferMode === "native") {
                     if (fileWriter) { await fileWriter.close(); fileWriter = null; }
                     safeSend(JSON.stringify({ type: "ack" }));
-                } else {
-                    // 🔥 MOBILE: Generate the internal Chrome download link
-                    const blob = new Blob(window.fileBuffer);
-                    const url = URL.createObjectURL(blob);
+                } else if (transferMode === "opfs") {
+                    // 🔥 MOBILE: Export file from OPFS to User's Download folder
+                    if (window.opfsWriter) {
+                        await window.opfsWriter.close();
+                        window.opfsWriter = null;
+                    }
                     
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = incomingFile.name;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    
-                    // Cleanup URL object after download triggers
-                    setTimeout(() => URL.revokeObjectURL(url), 10000);
-                    
-                    window.fileBuffer = []; // Free RAM immediately
+                    try {
+                        const file = await window.opfsFileHandle.getFile();
+                        const url = URL.createObjectURL(file);
+                        
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = incomingFile.name;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        
+                        setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+                        // Delete OPFS temp file after transfer is complete
+                        setTimeout(async () => {
+                            try {
+                                const opfsRoot = await navigator.storage.getDirectory();
+                                await opfsRoot.removeEntry(incomingFile.name);
+                            } catch(e){}
+                        }, 15000);
+                        
+                    } catch (err) {
+                        console.error("OPFS Export Error:", err);
+                    }
                     safeSend(JSON.stringify({ type: "ack" }));
                 }
             }
@@ -167,9 +203,9 @@ window.handleIncomingData = function (data) {
             // ================= WRITING CHUNKS =================
             if (transferMode === "native") {
                 try { if (fileWriter) await fileWriter.write(data); } catch(e) { return; }
-            } else {
-                // 🔥 MOBILE: Store chunk in RAM
-                window.fileBuffer.push(data);
+            } else if (transferMode === "opfs") {
+                // OPFS Direct Disk Write
+                try { if (window.opfsWriter) await window.opfsWriter.write(data); } catch(e) { return; }
             }
             
             receivedSize += data.byteLength;
