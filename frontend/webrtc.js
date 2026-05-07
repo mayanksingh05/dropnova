@@ -2,8 +2,9 @@ export let peerConnection;
 export let dataChannel;
 
 const config = {
-    // STUN REMOVED AS REQUESTED FOR PURE LOCAL TESTING
-    iceServers: [] 
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" }
+    ]
 };
 
 export function createConnection(socket, isSender, onConnected) {
@@ -74,7 +75,7 @@ export function createConnection(socket, isSender, onConnected) {
     socket.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);
         
-        if (data.type === "room-destroyed" || data.type === "disconnect") {
+        if (data.type === "room-destroyed" || data.type === "disconnect" || data.type === "peer-disconnected") {
             window.handlePeerDisconnect?.();
         }
         if (data.type === "offer") {

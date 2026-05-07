@@ -100,7 +100,6 @@ window.showBatchAcceptPrompt = function(files, callback) {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const fileListHTML = files.map(f => `<p style="font-size:12px; margin:2px 0;">${f.name} (${(f.size/1024/1024).toFixed(2)} MB)</p>`).join('');
     
-    // 🔥 Remove the folder warning since we aren't using directories anymore
     const warningHTML = isMobile 
         ? `<p style="font-size:12px; color:#facc15; margin-bottom:15px;">Your mobile browser requires saving each file individually.</p>`
         : `<p style="font-size:12px; color:#22c55e; margin-bottom:15px;">Files will prompt to save natively.</p>`;

@@ -30,7 +30,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         while True:
             data = await websocket.receive_text()
 
-            # 🔥 Heartbeat response
+            # Heartbeat ping/pong
             if data == '{"type":"ping"}':
                 await websocket.send_text('{"type":"pong"}')
                 continue
@@ -43,10 +43,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         if room_id in rooms and websocket in rooms[room_id]:
             rooms[room_id].remove(websocket)
 
-        # 🔥 Notify remaining peer and instantly destroy the ghost room
+        # Notify remaining peer and instantly destroy room
         for conn in rooms.get(room_id, []):
             try:
-                await conn.send_text('{"type":"room-destroyed"}')
+                await conn.send_text('{"type":"peer-disconnected"}')
             except:
                 pass
 

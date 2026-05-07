@@ -71,7 +71,6 @@ window.handleIncomingData = function (data) {
         if (typeof data === "string") {
             const msg = JSON.parse(data);
 
-            // 🔥 NEW: Global Kill Switch Listener
             if (msg.type === "cancel" || msg.type === "error") {
                 window.__cancelTransfer = true;
                 window.showTransferError(msg.type === "cancel" ? "Transfer cancelled by peer." : "Peer network error.");
@@ -98,11 +97,10 @@ window.handleIncomingData = function (data) {
                 startProgressEngine();
                 router.navigate("receiving");
 
-                // 🔥 THE SMART SPLIT
                 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
                 if (!isMobile && 'showSaveFilePicker' in window) {
-                    // PC/LAPTOP: Use Bulletproof Native API (Works perfectly in Incognito)
+                    // DESKTOP: Native API
                     transferMode = "native";
                     try {
                         const ext = msg.name.split('.').pop().toLowerCase();
@@ -119,8 +117,14 @@ window.handleIncomingData = function (data) {
                         safeSend(JSON.stringify({ type: "error" }));
                     }
                 } else {
-                    // MOBILE: Use Service Worker Hack
+                    // MOBILE/INCOGNITO: Service Worker Streaming
                     transferMode = "sw";
+                    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+                        alert("Secure Context Required. Please refresh or check HTTPS.");
+                        safeSend(JSON.stringify({ type: "error" }));
+                        return;
+                    }
+
                     const downloadUrl = `/sw-download/${Date.now()}_${encodeURIComponent(msg.name)}`;
                     const channel = new MessageChannel();
                     window.currentStreamPort = channel.port1;
@@ -166,7 +170,6 @@ window.handleIncomingData = function (data) {
                 } else {
                     if (window.currentStreamPort) {
                         window.currentStreamPort.postMessage({ type: 'END' });
-                        // Wait for STREAM_DRAINED to send ack
                     } else {
                         safeSend(JSON.stringify({ type: "ack" }));
                     }
@@ -213,7 +216,7 @@ window.handleFileSelect = function (event) {
 
 window.cancelTransfer = function () {
     window.__cancelTransfer = true;
-    safeSend(JSON.stringify({ type: "cancel" })); // 🔥 Send kill signal to peer
+    safeSend(JSON.stringify({ type: "cancel" }));
     window.fileQueue = []; 
     clearMemory();
     window.hideWaitingOverlay();

@@ -48,7 +48,7 @@ self.addEventListener('message', event => {
             }
         };
 
-        // 🔥 HANDSHAKE 1: Tell main thread we are awake!
+        // Handshake: Tell main thread SW is awake
         event.ports[0].postMessage({ type: 'STREAM_READY' });
     }
 });
@@ -74,7 +74,6 @@ self.addEventListener('fetch', event => {
                     controller.enqueue(streamInfo.queue.shift());
                 }
                 
-                // 🔥 HANDSHAKE 2: If file finished before user clicked save
                 if (streamInfo.isEnded) {
                     controller.close();
                     streamInfo.port.postMessage({ type: 'STREAM_DRAINED' });
