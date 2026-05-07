@@ -6,29 +6,13 @@ import { cleanupConnection, dataChannel } from './webrtc.js';
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(function(registrations) {
         for(let registration of registrations) {
-            registration.unregister().then(() => {
-                console.log("Ghost Service Worker successfully removed.");
-            });
+            registration.unregister();
         }
     });
 }
 
-// 🔥 OPFS Garbage Collector (Prevents Ghost Files from eating storage)
-async function cleanOPFS() {
-    if (!navigator.storage || !navigator.storage.getDirectory) return;
-    try {
-        const opfsRoot = await navigator.storage.getDirectory();
-        for await (const name of opfsRoot.keys()) {
-            await opfsRoot.removeEntry(name, { recursive: true });
-        }
-        console.log("OPFS Temporary Storage Cleared");
-    } catch(e) {}
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-    cleanOPFS(); // Sweep storage on boot
     window.router = router;
-    
     const themeToggle = document.getElementById('theme-toggle');
     const html = document.documentElement;
 
@@ -50,8 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggle.addEventListener('click', toggleTheme);
 
     const params = new URLSearchParams(window.location.search);
-    if (params.get("screen") === "receive") window.router.navigate("receive");
-    else window.router.navigate("home");
+    if (params.get("screen") === "receive") router.navigate("receive");
+    else router.navigate("home");
 });
 
 window.cleanupConnection = cleanupConnection;
@@ -73,7 +57,7 @@ window.handleDisconnect = function () {
     try { window.socket?.send(JSON.stringify({ type: "disconnect" })); } catch {}
     cleanupConnection();
     showDisconnectPopup("You disconnected");
-    window.router.navigate("home");
+    router.navigate("home");
 };
 
 window.handlePeerDisconnect = function () {
@@ -87,7 +71,7 @@ window.handlePeerDisconnect = function () {
     window.fileQueue = [];
     window.lastSentFile = null;
     window.hideWaitingOverlay(); 
-    window.router.navigate("home");
+    router.navigate("home");
 };
 
 window.showTransferError = function(message) {

@@ -1,4 +1,5 @@
 import { dataChannel } from "./webrtc.js";
+import { router } from "./router.js"; // 🔥 Explicit import to fix scoping bugs
 
 let fileWriter = null; 
 let transferMode = null; 
@@ -86,7 +87,7 @@ window.handleIncomingData = function (data) {
                 window.__cancelTransfer = true;
                 window.showTransferError(msg.type === "cancel" ? "Transfer cancelled by peer." : "Peer network error.");
                 clearMemory();
-                window.router.navigate("connected");
+                router.navigate("connected");
                 return;
             }
 
@@ -106,7 +107,7 @@ window.handleIncomingData = function (data) {
                 targetProgress[msg.id] = 0;
                 displayedProgress[msg.id] = 0;
                 startProgressEngine();
-                window.router.navigate("receiving");
+                router.navigate("receiving");
 
                 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
@@ -132,7 +133,7 @@ window.handleIncomingData = function (data) {
                     transferMode = "opfs";
                     try {
                         const opfsRoot = await navigator.storage.getDirectory();
-                        try { await opfsRoot.removeEntry(msg.name); } catch(e){} // Overwrite if exists
+                        try { await opfsRoot.removeEntry(msg.name); } catch(e){} 
 
                         window.opfsFileHandle = await opfsRoot.getFileHandle(msg.name, { create: true });
                         window.opfsWriter = await window.opfsFileHandle.createWritable();
@@ -178,7 +179,6 @@ window.handleIncomingData = function (data) {
                         
                         setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-                        // Delete OPFS temp file after transfer is complete
                         setTimeout(async () => {
                             try {
                                 const opfsRoot = await navigator.storage.getDirectory();
@@ -197,14 +197,13 @@ window.handleIncomingData = function (data) {
                 if (window.lastSentFile) window.sentFiles.push({ name: window.lastSentFile.name, size: window.lastSentFile.size });
             }
             else if (msg.type === "batch-complete") {
-                setTimeout(() => window.router.navigate("completed"), 1000);
+                setTimeout(() => router.navigate("completed"), 1000);
             }
         } else {
             // ================= WRITING CHUNKS =================
             if (transferMode === "native") {
                 try { if (fileWriter) await fileWriter.write(data); } catch(e) { return; }
             } else if (transferMode === "opfs") {
-                // OPFS Direct Disk Write
                 try { if (window.opfsWriter) await window.opfsWriter.write(data); } catch(e) { return; }
             }
             
@@ -238,7 +237,7 @@ window.cancelTransfer = function () {
     window.fileQueue = []; 
     clearMemory();
     window.hideWaitingOverlay();
-    window.router.navigate("connected");
+    router.navigate("connected");
 };
 
 
@@ -286,7 +285,7 @@ async function processQueue() {
 
     if (!window.__cancelTransfer && dataChannel?.readyState === "open") {
         safeSend(JSON.stringify({ type: "batch-complete" }));
-        window.router.navigate("completed");
+        router.navigate("completed");
     }
 }
 
@@ -309,7 +308,7 @@ async function sendFile(file) {
     startProgressEngine();
 
     window.incomingFile = { id: fileId, name: file.name };
-    window.router.navigate("sending");
+    router.navigate("sending");
 
     if (!safeSend(JSON.stringify({ type: "file-start", id: fileId, name: file.name, size: file.size }))) return;
 
