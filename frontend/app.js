@@ -2,7 +2,18 @@ import { router } from './router.js';
 import './fileTransfer.js';
 import { cleanupConnection, dataChannel } from './webrtc.js';
 
-// 🔥 NEW: OPFS Garbage Collector (Prevents Ghost Files from eating storage)
+// 💀 SWEEP GHOST SERVICE WORKERS 💀
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+            registration.unregister().then(() => {
+                console.log("Ghost Service Worker successfully removed.");
+            });
+        }
+    });
+}
+
+// 🔥 OPFS Garbage Collector (Prevents Ghost Files from eating storage)
 async function cleanOPFS() {
     if (!navigator.storage || !navigator.storage.getDirectory) return;
     try {
@@ -17,6 +28,7 @@ async function cleanOPFS() {
 document.addEventListener('DOMContentLoaded', () => {
     cleanOPFS(); // Sweep storage on boot
     window.router = router;
+    
     const themeToggle = document.getElementById('theme-toggle');
     const html = document.documentElement;
 
@@ -38,8 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggle.addEventListener('click', toggleTheme);
 
     const params = new URLSearchParams(window.location.search);
-    if (params.get("screen") === "receive") router.navigate("receive");
-    else router.navigate("home");
+    if (params.get("screen") === "receive") window.router.navigate("receive");
+    else window.router.navigate("home");
 });
 
 window.cleanupConnection = cleanupConnection;
@@ -61,7 +73,7 @@ window.handleDisconnect = function () {
     try { window.socket?.send(JSON.stringify({ type: "disconnect" })); } catch {}
     cleanupConnection();
     showDisconnectPopup("You disconnected");
-    router.navigate("home");
+    window.router.navigate("home");
 };
 
 window.handlePeerDisconnect = function () {
@@ -75,7 +87,7 @@ window.handlePeerDisconnect = function () {
     window.fileQueue = [];
     window.lastSentFile = null;
     window.hideWaitingOverlay(); 
-    router.navigate("home");
+    window.router.navigate("home");
 };
 
 window.showTransferError = function(message) {

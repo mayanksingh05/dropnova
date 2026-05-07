@@ -86,7 +86,7 @@ window.handleIncomingData = function (data) {
                 window.__cancelTransfer = true;
                 window.showTransferError(msg.type === "cancel" ? "Transfer cancelled by peer." : "Peer network error.");
                 clearMemory();
-                router.navigate("connected");
+                window.router.navigate("connected");
                 return;
             }
 
@@ -106,7 +106,7 @@ window.handleIncomingData = function (data) {
                 targetProgress[msg.id] = 0;
                 displayedProgress[msg.id] = 0;
                 startProgressEngine();
-                router.navigate("receiving");
+                window.router.navigate("receiving");
 
                 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
@@ -197,7 +197,7 @@ window.handleIncomingData = function (data) {
                 if (window.lastSentFile) window.sentFiles.push({ name: window.lastSentFile.name, size: window.lastSentFile.size });
             }
             else if (msg.type === "batch-complete") {
-                setTimeout(() => router.navigate("completed"), 1000);
+                setTimeout(() => window.router.navigate("completed"), 1000);
             }
         } else {
             // ================= WRITING CHUNKS =================
@@ -238,7 +238,7 @@ window.cancelTransfer = function () {
     window.fileQueue = []; 
     clearMemory();
     window.hideWaitingOverlay();
-    router.navigate("connected");
+    window.router.navigate("connected");
 };
 
 
@@ -286,7 +286,7 @@ async function processQueue() {
 
     if (!window.__cancelTransfer && dataChannel?.readyState === "open") {
         safeSend(JSON.stringify({ type: "batch-complete" }));
-        router.navigate("completed");
+        window.router.navigate("completed");
     }
 }
 
@@ -309,7 +309,7 @@ async function sendFile(file) {
     startProgressEngine();
 
     window.incomingFile = { id: fileId, name: file.name };
-    router.navigate("sending");
+    window.router.navigate("sending");
 
     if (!safeSend(JSON.stringify({ type: "file-start", id: fileId, name: file.name, size: file.size }))) return;
 
