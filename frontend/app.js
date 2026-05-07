@@ -2,12 +2,6 @@ import { router } from './router.js';
 import './fileTransfer.js';
 import { cleanupConnection, dataChannel } from './webrtc.js';
 
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').then(reg => {
-        reg.update(); 
-    }).catch(err => console.error("SW Registration Failed:", err));
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     window.router = router;
     const themeToggle = document.getElementById('theme-toggle');

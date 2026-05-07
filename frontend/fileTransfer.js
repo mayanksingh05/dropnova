@@ -16,7 +16,9 @@ window.fileAckReceived = false;
 window.fileQueue = [];
 window.sentFiles = [];
 window.__cancelTransfer = false;
-window.currentStreamPort = null;
+
+// 🔥 NEW: Store chunks for mobile Blob
+window.fileBuffer = []; 
 
 function safeSend(data) {
     if (dataChannel && dataChannel.readyState === "open") {
@@ -28,10 +30,7 @@ function safeSend(data) {
 function clearMemory() {
     incomingFile = null;
     receivedSize = 0;
-    if (window.currentStreamPort) {
-        window.currentStreamPort.postMessage({ type: 'ABORT' });
-        window.currentStreamPort = null;
-    }
+    window.fileBuffer = []; // Free RAM
 }
 
 const targetProgress = {};
@@ -117,39 +116,10 @@ window.handleIncomingData = function (data) {
                         safeSend(JSON.stringify({ type: "error" }));
                     }
                 } else {
-                    // MOBILE/INCOGNITO: Service Worker Streaming
-                    transferMode = "sw";
-                    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
-                        alert("Secure Context Required. Please refresh or check HTTPS.");
-                        safeSend(JSON.stringify({ type: "error" }));
-                        return;
-                    }
-
-                    const downloadUrl = `/sw-download/${Date.now()}_${encodeURIComponent(msg.name)}`;
-                    const channel = new MessageChannel();
-                    window.currentStreamPort = channel.port1;
-
-                    channel.port1.onmessage = (e) => {
-                        if (e.data.type === 'STREAM_READY') {
-                            const a = document.createElement('a');
-                            a.href = downloadUrl;
-                            a.download = msg.name;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                            safeSend(JSON.stringify({ type: "ready" }));
-                        } 
-                        else if (e.data.type === 'STREAM_DRAINED') {
-                            window.currentStreamPort = null;
-                            safeSend(JSON.stringify({ type: "ack" }));
-                        } 
-                        else if (e.data.type === 'CANCELLED') {
-                            window.__cancelTransfer = true;
-                            safeSend(JSON.stringify({ type: "error" }));
-                        }
-                    };
-
-                    navigator.serviceWorker.controller.postMessage({ type: 'START_STREAM', url: downloadUrl, size: msg.size }, [channel.port2]);
+                    // 🔥 MOBILE: Rock-solid Blob Fallback
+                    transferMode = "blob";
+                    window.fileBuffer = [];
+                    safeSend(JSON.stringify({ type: "ready" }));
                 }
             }
             else if (msg.type === "ready") window.receiverReady = true;
@@ -168,11 +138,22 @@ window.handleIncomingData = function (data) {
                     if (fileWriter) { await fileWriter.close(); fileWriter = null; }
                     safeSend(JSON.stringify({ type: "ack" }));
                 } else {
-                    if (window.currentStreamPort) {
-                        window.currentStreamPort.postMessage({ type: 'END' });
-                    } else {
-                        safeSend(JSON.stringify({ type: "ack" }));
-                    }
+                    // 🔥 MOBILE: Generate the internal Chrome download link
+                    const blob = new Blob(window.fileBuffer);
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = incomingFile.name;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    
+                    // Cleanup URL object after download triggers
+                    setTimeout(() => URL.revokeObjectURL(url), 10000);
+                    
+                    window.fileBuffer = []; // Free RAM immediately
+                    safeSend(JSON.stringify({ type: "ack" }));
                 }
             }
             else if (msg.type === "ack") {
@@ -187,7 +168,8 @@ window.handleIncomingData = function (data) {
             if (transferMode === "native") {
                 try { if (fileWriter) await fileWriter.write(data); } catch(e) { return; }
             } else {
-                if (window.currentStreamPort) window.currentStreamPort.postMessage({ type: 'CHUNK', chunk: data });
+                // 🔥 MOBILE: Store chunk in RAM
+                window.fileBuffer.push(data);
             }
             
             receivedSize += data.byteLength;
