@@ -150,7 +150,7 @@ window.showBatchAcceptPrompt = function(files, callback) {
 };
 
 window.showSingleSavePrompt = function(filename, callback) {
-    const ext = filename.slice((filename.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+    const ext = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
     const isDangerous = dangerousExtensions.includes(`.${ext}`);
     
     const secWarning = isDangerous 
