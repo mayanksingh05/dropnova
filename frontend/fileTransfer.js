@@ -1,5 +1,5 @@
 import { dataChannel } from "./webrtc.js";
-import { router } from "./router.js"; // 🔥 Explicit import to fix scoping bugs
+import { router } from "./router.js"; 
 
 let fileWriter = null; 
 let transferMode = null; 
@@ -10,6 +10,10 @@ let currentFileSize = 0;
 
 let writeQueue = Promise.resolve();
 
+// ETA Tracking globals
+let lastProgressTime = 0;
+let lastReceivedSize = 0;
+
 window.batchAccepted = false;
 window.batchDeclined = false;
 window.receiverReady = false;
@@ -17,6 +21,7 @@ window.fileAckReceived = false;
 window.fileQueue = [];
 window.sentFiles = [];
 window.__cancelTransfer = false;
+window.resumeOffset = 0; 
 
 // OPFS Globals
 window.opfsFileHandle = null;
@@ -34,7 +39,6 @@ function clearMemory() {
         try { window.opfsWriter.close(); } catch(e){}
         window.opfsWriter = null;
     }
-    // Delete OPFS file if cancelled mid-transfer
     if (window.opfsFileHandle && incomingFile) {
         try {
             navigator.storage.getDirectory().then(root => {
@@ -100,7 +104,6 @@ window.handleIncomingData = function (data) {
             else if (msg.type === "batch-decline") window.batchDeclined = true;
             
             else if (msg.type === "file-start") {
-                clearMemory(); 
                 incomingFile = msg;
                 window.incomingFile = msg;
                 
@@ -112,7 +115,6 @@ window.handleIncomingData = function (data) {
                 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
                 if (!isMobile && 'showSaveFilePicker' in window) {
-                    // DESKTOP: Native API
                     transferMode = "native";
                     try {
                         const ext = msg.name.split('.').pop().toLowerCase();
@@ -123,32 +125,50 @@ window.handleIncomingData = function (data) {
                             suggestedName: msg.name,
                             types: [{ description: `${ext.toUpperCase()} File`, accept: { [mimeType]: [`.${ext}`] } }]
                         });
-                        fileWriter = await handle.createWritable();
-                        safeSend(JSON.stringify({ type: "ready" }));
+                        fileWriter = await handle.createWritable(); // Native doesn't support easy resume offset yet
+                        receivedSize = 0;
+                        lastProgressTime = Date.now();
+                        lastReceivedSize = 0;
+                        safeSend(JSON.stringify({ type: "ready", offset: 0 }));
                     } catch (e) {
                         safeSend(JSON.stringify({ type: "error" }));
                     }
                 } else {
-                    // 🔥 MOBILE: OPFS Virtual Hard Drive
+                    // 🔥 MOBILE: OPFS with RESUME Capability
                     transferMode = "opfs";
                     try {
                         const opfsRoot = await navigator.storage.getDirectory();
-                        try { await opfsRoot.removeEntry(msg.name); } catch(e){} 
-
                         window.opfsFileHandle = await opfsRoot.getFileHandle(msg.name, { create: true });
-                        window.opfsWriter = await window.opfsFileHandle.createWritable();
-                        safeSend(JSON.stringify({ type: "ready" }));
+                        
+                        const existingFile = await window.opfsFileHandle.getFile();
+                        const offset = existingFile.size; 
+                        
+                        window.opfsWriter = await window.opfsFileHandle.createWritable({ keepExistingData: true });
+                        await window.opfsWriter.seek(offset); 
+                        
+                        receivedSize = offset; // Start progress from existing size
+                        lastProgressTime = Date.now();
+                        lastReceivedSize = receivedSize;
+                        
+                        safeSend(JSON.stringify({ type: "ready", offset: offset }));
                     } catch (err) {
                         console.error("OPFS Access Error:", err);
                         safeSend(JSON.stringify({ type: "error" }));
                     }
                 }
             }
-            else if (msg.type === "ready") window.receiverReady = true;
+            else if (msg.type === "ready") {
+                window.receiverReady = true;
+                window.resumeOffset = msg.offset || 0;
+            }
             
             else if (msg.type === "progress" && window.isSender) {
                 if (!currentFileSize) return;
                 targetProgress[msg.id] = Math.floor((msg.received / currentFileSize) * 100);
+                
+                // Expose speed/eta for UI if you want to add it to sending.js
+                window.currentSpeed = msg.speed;
+                window.currentEta = msg.eta;
             }
             
             else if (msg.type === "file-end") {
@@ -160,7 +180,6 @@ window.handleIncomingData = function (data) {
                     if (fileWriter) { await fileWriter.close(); fileWriter = null; }
                     safeSend(JSON.stringify({ type: "ack" }));
                 } else if (transferMode === "opfs") {
-                    // 🔥 MOBILE: Export file from OPFS to User's Download folder
                     if (window.opfsWriter) {
                         await window.opfsWriter.close();
                         window.opfsWriter = null;
@@ -178,7 +197,6 @@ window.handleIncomingData = function (data) {
                         a.remove();
                         
                         setTimeout(() => URL.revokeObjectURL(url), 10000);
-
                         setTimeout(async () => {
                             try {
                                 const opfsRoot = await navigator.storage.getDirectory();
@@ -210,9 +228,29 @@ window.handleIncomingData = function (data) {
             receivedSize += data.byteLength;
             targetProgress[incomingFile.id] = Math.floor((receivedSize / incomingFile.size) * 100);
 
-            if (Date.now() - (window.lastProgressSent || 0) > 100) {
+            if (Date.now() - (window.lastProgressSent || 0) > 250) {
                 window.lastProgressSent = Date.now();
-                safeSend(JSON.stringify({ type: "progress", id: incomingFile.id, received: receivedSize }));
+                
+                const now = Date.now();
+                const timeDiffSec = (now - lastProgressTime) / 1000;
+                const bytesSinceLast = receivedSize - lastReceivedSize;
+                const speedBps = timeDiffSec > 0 ? (bytesSinceLast / timeDiffSec) : 0;
+                const bytesRemaining = incomingFile.size - receivedSize;
+                const etaSeconds = speedBps > 0 ? (bytesRemaining / speedBps) : 0;
+                
+                lastProgressTime = now;
+                lastReceivedSize = receivedSize;
+                
+                window.currentSpeed = speedBps;
+                window.currentEta = etaSeconds;
+
+                safeSend(JSON.stringify({ 
+                    type: "progress", 
+                    id: incomingFile.id, 
+                    received: receivedSize,
+                    speed: speedBps,
+                    eta: Math.round(etaSeconds)
+                }));
             }
         }
     }).catch(err => {
@@ -222,6 +260,13 @@ window.handleIncomingData = function (data) {
 
 window.handleFileSelect = function (event) {
     const files = Array.from(event.target.files);
+    
+    if (files.length > 20) {
+        window.showTransferError("Max 20 files per batch. Use the DropNova App for larger transfers.");
+        event.target.value = ""; 
+        return;
+    }
+    
     if (!files.length) return;
     window.fileQueue.push(...files);
     if (!window.__sendingStarted) {
@@ -302,6 +347,7 @@ async function sendFile(file) {
     window.lastSentFile = file;
     window.receiverReady = false;
     window.fileAckReceived = false;
+    window.resumeOffset = 0; 
 
     targetProgress[fileId] = 0;
     displayedProgress[fileId] = 0;
@@ -320,7 +366,7 @@ async function sendFile(file) {
         await new Promise(r => setTimeout(r, 50));
     }
 
-    let offset = 0;
+    let offset = window.resumeOffset; 
     const chunkSize = 64 * 1024; 
 
     while (offset < file.size) {

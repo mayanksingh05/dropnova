@@ -1,6 +1,5 @@
 export const Completed = () => {
     const isSender = window.isSender;
-
     const files = window.receivedFiles || [];
 
     const formatSize = (bytes) => {
@@ -10,15 +9,9 @@ export const Completed = () => {
         return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
     };
 
-    const message = isSender
-        ? "File sent successfully"
-        : "File received successfully";
+    const message = isSender ? "File sent successfully" : "File received successfully";
+    const actionText = isSender ? "Send Another File" : "Receive More Files";
 
-    const actionText = isSender
-        ? "Send Another File"
-        : "Receive More Files";
-
-    // 📥 RECEIVER FILE LIST UI
     const receivedList = files.map((file) => `
         <div class="p-4 glass-card flex items-center justify-between gap-4">
             <div class="text-left min-w-0">
@@ -28,7 +21,6 @@ export const Completed = () => {
         </div>
     `).join("");
 
-    // 📤 SENDER FILE UI
     const sentFiles = window.sentFiles || [];
 
     const senderBox = `
@@ -61,11 +53,7 @@ export const Completed = () => {
             <p class="text-gray-400">${message}</p>
         </div>
 
-        ${
-            isSender
-                ? senderBox
-                : `<div class="space-y-3">${receivedList || "<p class='opacity-50'>No files received</p>"}</div>`
-        }
+        ${isSender ? senderBox : `<div class="space-y-3">${receivedList || "<p class='opacity-50'>No files received</p>"}</div>`}
 
         <div class="space-y-3 w-full max-w-[260px] mx-auto">
             <button onclick="router.navigate('connected')" 

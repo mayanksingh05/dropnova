@@ -13,9 +13,7 @@ window.connectDevice = function () {
 
     socket.onopen = () => {
         console.log("Receiver connected");
-
         window.isSender = false;
-
         createConnection(socket, false, () => {
             router.navigate("connected");
         });
@@ -27,10 +25,7 @@ window.connectDevice = function () {
 
     socket.onclose = () => {
         if (window.isManualDisconnect) return;
-
-        // 🔥 allow disconnect handler to run
         window.__disconnectHandled = false;
-
         window.handlePeerDisconnect?.();
     };
 
@@ -39,7 +34,6 @@ window.connectDevice = function () {
 
 export const Receive = () => {
 
-    // 🔥 auto-connect if QR used
     requestAnimationFrame(() => {
         const params = new URLSearchParams(window.location.search);
         const code = params.get("code");
@@ -49,6 +43,10 @@ export const Receive = () => {
             if (input) {
                 input.value = code;
 
+                // 🔥 THE FIX: Clean the URL so refreshing doesn't auto-fill
+                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?screen=receive";
+                window.history.replaceState({path: cleanUrl}, '', cleanUrl);
+
                 setTimeout(() => {
                     connectDevice();
                 }, 200);
@@ -57,36 +55,33 @@ export const Receive = () => {
     });
 
     return `
-<div class="w-full text-center space-y-8">
+    <div class="w-full text-center space-y-8">
+        <h2 class="text-3xl font-bold tracking-tight">Connect Device</h2>
+        <p class="text-sm opacity-60 px-6">
+            Enter the 6-digit code shown on sender
+        </p>
 
-    <h2 class="text-3xl font-bold tracking-tight">Connect Device</h2>
+        <input 
+            id="pair-code"
+            maxlength="6"
+            placeholder="000000"
+            class="w-full max-w-[260px] text-center text-4xl font-mono py-4 rounded-2xl 
+            bg-gray-100 dark:bg-white/5 border border-white/10 
+            focus:border-primary outline-none transition"
+        >
 
-    <p class="text-sm opacity-60 px-6">
-        Enter the 6-digit code shown on sender
-    </p>
+        <div class="space-y-3 w-full max-w-[260px] mx-auto">
+            <button onclick="connectDevice()" 
+            class="w-full py-4 rounded-2xl bg-primary text-white font-bold 
+            shadow-lg hover:scale-[1.03] transition">
+                Connect
+            </button>
 
-    <input 
-        id="pair-code"
-        maxlength="6"
-        placeholder="000000"
-        class="w-full max-w-[260px] text-center text-4xl font-mono py-4 rounded-2xl 
-        bg-gray-100 dark:bg-white/5 border border-white/10 
-        focus:border-primary outline-none transition"
-    >
-
-    <div class="space-y-3 w-full max-w-[260px] mx-auto">
-        <button onclick="connectDevice()" 
-        class="w-full py-4 rounded-2xl bg-primary text-white font-bold 
-        shadow-lg hover:scale-[1.03] transition">
-            Connect
-        </button>
-
-        <button onclick="router.navigate('home')" 
-        class="w-full text-sm opacity-50 hover:opacity-100 transition">
-            Back
-        </button>
+            <button onclick="router.navigate('home')" 
+            class="w-full text-sm opacity-50 hover:opacity-100 transition">
+                Back
+            </button>
+        </div>
     </div>
-
-</div>
-`;
+    `;
 };

@@ -28,7 +28,6 @@ export const Connected = () => {
         ${
             isSender ? `
             <div class="w-full space-y-4">
-
                 <div class="w-full p-8 border-2 border-dashed border-gray-400/30 dark:border-white/20 
                 rounded-3xl cursor-pointer hover:border-primary transition-all duration-300"
                 onclick="document.getElementById('file-input').click()">
@@ -40,11 +39,9 @@ export const Connected = () => {
                     <p class="font-bold text-base">Select File</p>
                     <p class="text-xs opacity-60 mt-1">Send to connected device</p>
                 </div>
-
             </div>
             ` : `
             <div class="w-full space-y-4">
-
                 <div class="w-full p-8 border-2 border-dashed border-gray-400/20 dark:border-white/10 
                 rounded-3xl opacity-60">
 
@@ -53,7 +50,6 @@ export const Connected = () => {
                     <p class="text-xs opacity-60 mt-1">Files will appear automatically</p>
 
                 </div>
-
             </div>
             `
         }

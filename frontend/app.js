@@ -11,6 +11,22 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// 🧹 OPFS BOOT WIPE: Clean orphaned files from previous crashed sessions
+async function wipeOPFS() {
+    try {
+        const root = await navigator.storage.getDirectory();
+        for await (const [name, handle] of root) {
+            await root.removeEntry(name, { recursive: true });
+            console.log(`Cleaned orphaned file: ${name}`);
+        }
+    } catch (e) {
+        // OPFS iteration not supported on older browsers, fail silently
+    }
+}
+wipeOPFS();
+
+const dangerousExtensions = ['.exe', '.bat', '.sh', '.cmd', '.vbs', '.msi', '.apk'];
+
 document.addEventListener('DOMContentLoaded', () => {
     window.router = router;
     const themeToggle = document.getElementById('theme-toggle');
@@ -101,7 +117,11 @@ window.hideWaitingOverlay = function() {
 
 window.showBatchAcceptPrompt = function(files, callback) {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const fileListHTML = files.map(f => `<p style="font-size:12px; margin:2px 0;">${f.name} (${(f.size/1024/1024).toFixed(2)} MB)</p>`).join('');
+    const fileListHTML = files.map(f => {
+        const ext = f.name.slice((f.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+        const warn = dangerousExtensions.includes(`.${ext}`) ? '⚠️' : '';
+        return `<p style="font-size:12px; margin:2px 0;">${warn} ${f.name} (${(f.size/1024/1024).toFixed(2)} MB)</p>`;
+    }).join('');
     
     const warningHTML = isMobile 
         ? `<p style="font-size:12px; color:#facc15; margin-bottom:15px;">Your mobile browser requires saving each file individually.</p>`
@@ -130,11 +150,19 @@ window.showBatchAcceptPrompt = function(files, callback) {
 };
 
 window.showSingleSavePrompt = function(filename, callback) {
+    const ext = filename.slice((filename.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+    const isDangerous = dangerousExtensions.includes(`.${ext}`);
+    
+    const secWarning = isDangerous 
+        ? `<p style="color: #ff4d4d; font-size: 12px; font-weight: bold; margin-bottom: 10px;">⚠️ Warning: This file type can be dangerous.</p>` 
+        : '';
+
     const div = document.createElement("div");
     div.innerHTML = `
         <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:99999; display:flex; align-items:center; justify-content:center;">
             <div style="background:#1e293b; padding:24px; border-radius:16px; text-align:center; max-width:300px; color:white; border: 1px solid rgba(255,255,255,0.1);">
                 <h3 style="font-size:18px; font-weight:bold; margin-bottom:10px;">Save Next File</h3>
+                ${secWarning}
                 <p style="font-size:14px; opacity:0.8; margin-bottom:20px; word-wrap: break-word;">${filename}</p>
                 <button id="btn-save-next" style="width:100%; padding:10px; border-radius:8px; background:#22c55e; color:white; font-weight:bold;">Save File</button>
             </div>
