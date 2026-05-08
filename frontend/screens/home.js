@@ -27,7 +27,7 @@ export const Home = () => `
             <p class="font-bold text-yellow-400">⚠ File Size Notice</p>
 
             <p class="opacity-80">
-                For best performance, send files between <b>1MB – 50MB</b>.
+                For best performance, send files between <b>10KB – 500MB</b>.
                 Larger files may fail on mobile browsers.
             </p>
 

@@ -34,9 +34,8 @@ export function createConnection(socket, isSender, onConnected) {
         window.fileQueue = [];
         window.__sendingStarted = false;
         window.receivedFiles = [];
-        
-        // 🔥 FIX FOR ISSUE 2: Reset the cancel flag so the receiver accepts files again
-        window.__cancelTransfer = false; 
+        window.sentFiles = []; // 🔥 Fix: Clears sender history for new sessions
+        window.__cancelTransfer = false; // 🔥 Fix: Allows receiver to accept files again
 
         if (!connected) {
             connected = true;
@@ -55,7 +54,7 @@ export function createConnection(socket, isSender, onConnected) {
         if (state === "connected" || state === "completed") {
             window.__disconnectHandled = false;
             safeConnect();
-        // 🔥 FIX FOR ISSUE 1: Removed "disconnected" so brief network hiccups don't kill the transfer
+        // 🔥 Fix: Removed "disconnected" so brief network hiccups don't kill the transfer
         } else if (state === "failed" || state === "closed") {
             window.handlePeerDisconnect?.();
         }

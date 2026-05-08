@@ -69,6 +69,7 @@ window.handleDisconnect = function () {
     window.__disconnectHandled = true;
     window.isManualDisconnect = true;
     window.__cancelTransfer = true; 
+    window.sentFiles = []; // 🔥 Fix: Clears sender history
 
     try { window.socket?.send(JSON.stringify({ type: "disconnect" })); } catch {}
     cleanupConnection();
@@ -86,6 +87,7 @@ window.handlePeerDisconnect = function () {
     window.receivedFiles = [];
     window.fileQueue = [];
     window.lastSentFile = null;
+    window.sentFiles = []; // 🔥 Fix: Clears sender history
     window.hideWaitingOverlay(); 
     router.navigate("home");
 };
@@ -118,7 +120,8 @@ window.hideWaitingOverlay = function() {
 window.showBatchAcceptPrompt = function(files, callback) {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const fileListHTML = files.map(f => {
-        const ext = f.name.slice((f.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+        // 🔥 Fix: Safely parse extension to prevent crashes on files with no extension
+        const ext = f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : '';
         const warn = dangerousExtensions.includes(`.${ext}`) ? '⚠️' : '';
         return `<p style="font-size:12px; margin:2px 0;">${warn} ${f.name} (${(f.size/1024/1024).toFixed(2)} MB)</p>`;
     }).join('');
@@ -150,6 +153,7 @@ window.showBatchAcceptPrompt = function(files, callback) {
 };
 
 window.showSingleSavePrompt = function(filename, callback) {
+    // 🔥 Fix: Safely parse extension to prevent crashes on files with no extension
     const ext = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
     const isDangerous = dangerousExtensions.includes(`.${ext}`);
     
@@ -186,6 +190,7 @@ window.addEventListener("beforeunload", () => {
     window.__cancelTransfer = true;
     window.fileQueue = [];
     window.receivedFiles = [];
+    window.sentFiles = []; // 🔥 Fix: Clears sender history
     window.incomingFile = null;
     try { window.socket?.send(JSON.stringify({ type: "disconnect" })); } catch {}
     try { window.socket?.close(); } catch {}
