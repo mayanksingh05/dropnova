@@ -23,7 +23,7 @@ export const Connected = () => {
             <input type="file" id="file-input" multiple class="hidden" onchange="handleFileSelect(event)">
             
             <button onclick="document.getElementById('file-input').click()" 
-            class="w-full py-4 rounded-2xl bg-primary text-white font-bold hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
+            class="w-full py-4 rounded-2xl bg-primary text-white font-bold hover:scale-[1.03] transition-all shadow-lg flex items-center justify-center gap-2">
                 <span class="text-xl">📁</span> Select Files
             </button>
         </div>
@@ -33,9 +33,9 @@ export const Connected = () => {
         </div>
         `}
 
-        <div class="pt-4 space-y-3 w-full">
+        <div class="pt-2 space-y-3 w-full max-w-[260px] mx-auto">
             <button onclick="handleDisconnect()" 
-            class="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-red-400 font-bold hover:bg-red-500/10 transition">
+            class="w-full text-sm opacity-50 hover:opacity-100 transition text-red-400">
                 Disconnect Session
             </button>
         </div>

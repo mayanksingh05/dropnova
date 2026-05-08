@@ -18,7 +18,7 @@ export const Completed = () => {
         ? "Send Another File"
         : "Receive More Files";
 
-    // 📥 RECEIVER FILE LIST UI (No Download Button)
+    // 📥 RECEIVER FILE LIST UI
     const receivedList = files.map((file) => `
         <div class="p-4 glass-card flex items-center justify-between gap-4">
             <div class="text-left min-w-0">
@@ -67,10 +67,15 @@ export const Completed = () => {
                 : `<div class="space-y-3">${receivedList || "<p class='opacity-50'>No files received</p>"}</div>`
         }
 
-        <div class="space-y-3 w-full">
+        <div class="space-y-3 w-full max-w-[260px] mx-auto">
             <button onclick="router.navigate('connected')" 
-            class="w-full py-4 rounded-2xl bg-primary text-white font-bold hover:scale-[1.02] transition-all">
+            class="w-full py-4 rounded-2xl bg-primary text-white font-bold shadow-lg hover:scale-[1.03] transition">
                 ${actionText}
+            </button>
+            
+            <button onclick="handleDisconnect()" 
+            class="w-full mt-2 text-sm opacity-50 hover:opacity-100 transition text-red-400">
+                Disconnect Session
             </button>
         </div>
 
