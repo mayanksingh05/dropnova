@@ -1,81 +1,67 @@
-export const Completed = () => {
+setTimeout(() => {
+    const list = document.getElementById("transfer-list");
+    if (list) list.innerHTML = "";
+}, 0);
+
+export const Connected = () => {
     const isSender = window.isSender;
 
-    const files = window.receivedFiles || [];
-
-    const formatSize = (bytes) => {
-        if (!bytes) return "";
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-    };
-
-    const message = isSender
-        ? "File sent successfully"
-        : "File received successfully";
-
-    const actionText = isSender
-        ? "Send Another File"
-        : "Receive More Files";
-
-    const receivedList = files.map((file) => `
-        <div class="p-4 glass-card flex items-center justify-between gap-4">
-            <div class="text-left min-w-0">
-                <p class="font-bold truncate">${file.name}</p>
-                <p class="text-xs opacity-50">${formatSize(file.size)} • Saved to disk</p>
-            </div>
-        </div>
-    `).join("");
-
-    const sentFiles = window.sentFiles || [];
-
-    const senderBox = `
-    <div class="w-full space-y-2">
-        ${sentFiles.map(file => `
-            <div class="p-4 glass-card flex items-center justify-between gap-4">
-                <div class="text-left min-w-0">
-                    <p class="font-bold truncate">${file.name}</p>
-                    <p class="text-xs opacity-50">
-                        ${formatSize(file.size)} • Sent Successfully
-                    </p>
-                </div>
-            </div>
-        `).join("")}
-    </div>
-    `;
+    const mode = window.connectionMode === "relay"
+        ? "🌐 Global Mode (slower)"
+        : "⚡ Fast Mode (same network)";
 
     return `
-    <div class="w-full text-center space-y-8">
+    <div class="w-full text-center space-y-10">
 
-        <div class="relative inline-block">
-            <div class="w-24 h-24 bg-success/20 rounded-full flex items-center justify-center text-4xl animate-bounce">
-                ✅
-            </div>
-            <div class="absolute inset-0 bg-success/20 rounded-full animate-ping"></div>
+        <div class="flex items-center justify-center gap-4">
+            <div class="text-3xl">📱</div>
+            <div class="w-16 h-[2px] bg-gradient-to-r from-transparent via-primary to-transparent animate-pulse"></div>
+            <div class="text-3xl">💻</div>
         </div>
 
         <div class="space-y-2">
-            <h2 class="text-3xl font-bold">Transfer Complete</h2>
-            <p class="text-gray-400">${message}</p>
+            <h2 class="text-2xl font-bold">Devices Connected</h2>
+            <p class="text-green-400 text-sm">Secure connection established</p>
+            <p class="text-xs opacity-70">${mode}</p>
         </div>
 
         ${
-            isSender
-                ? senderBox
-                : `<div class="space-y-3">${receivedList || "<p class='opacity-50'>No files received</p>"}</div>`
+            isSender ? `
+            <div class="w-full space-y-4">
+
+                <div class="w-full p-8 border-2 border-dashed border-gray-400/30 dark:border-white/20 
+                rounded-3xl cursor-pointer hover:border-primary transition-all duration-300"
+                onclick="document.getElementById('file-input').click()">
+
+                    <input type="file" id="file-input" multiple class="hidden"
+                    onchange="handleFileSelect(event)">
+
+                    <div class="text-4xl mb-3">📄</div>
+                    <p class="font-bold text-base">Select File</p>
+                    <p class="text-xs opacity-60 mt-1">Send to connected device</p>
+                </div>
+
+            </div>
+            ` : `
+            <div class="w-full space-y-4">
+
+                <div class="w-full p-8 border-2 border-dashed border-gray-400/20 dark:border-white/10 
+                rounded-3xl opacity-60">
+
+                    <div class="text-4xl mb-3">📥</div>
+                    <p class="font-bold text-base">Waiting for files</p>
+                    <p class="text-xs opacity-60 mt-1">Files will appear automatically</p>
+
+                </div>
+
+            </div>
+            `
         }
 
-        <div class="space-y-3 w-full">
-            <button onclick="router.navigate('connected')" 
-            class="w-full py-4 rounded-2xl bg-primary text-white font-bold hover:scale-[1.02] transition-all">
-                ${actionText}
-            </button>
-            
-            <button onclick="handleDisconnect()" 
-            class="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-red-400 font-bold hover:bg-red-500/10 transition">
-                Disconnect Session
-            </button>
-        </div>
+        <button onclick="handleDisconnect()" 
+        class="text-red-400 text-sm hover:underline">
+            Disconnect
+        </button>
 
     </div>
     `;
